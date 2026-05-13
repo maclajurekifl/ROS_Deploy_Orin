@@ -126,7 +126,8 @@ slam_bringup:
   # During **turns**: more / tighter keyframes + stable deskew reduce curved walls. Straight runs stay good.
   keyframe_min_dist_m: 0.15
   keyframe_min_yaw_deg: 3.0
-  keyframe_min_time_sec: 0.55
+  # Avoid seeding many near-duplicate keyframes while stationary; rely on real motion (dist/yaw) for early map quality.
+  keyframe_min_time_sec: 2.0
   # Final merge voxel for ``/keyframe_map`` (centroid per cell). Smaller → sharper walls, more points.
   keyframe_voxel_leaf_m: 0.06
   keyframe_max_map_points: 1200000
