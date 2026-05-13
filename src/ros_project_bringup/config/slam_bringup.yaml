@@ -151,7 +151,9 @@ slam_bringup:
   imu_mount_roll_deg: 0.0
   imu_mount_pitch_deg: 0.0
   # Yaw from base_link → imu_link: use 0 if gyro axes match REP-103 base (fix path spin from wrong ωz).
-  # Restore -90 (or other) only if CAD/driver frame differs — see docs/imu_mount_note.md.
+  # If ``/ekf/path`` **heading** looks correct but **translation** still moves opposite drive direction,
+  # the Microstrain linear accel may be wrong in ``base_link`` — try **``imu_mount_yaw_deg: 180.0``**
+  # (or 90 / −90 per CAD) so IMU integration matches LiDAR odom; see docs/imu_mount_note.md.
   imu_mount_yaw_deg: 0.0
 
   # Livox node from this launch only when ``launch_sensors:=true`` (ignored when sensors off).
@@ -281,15 +283,15 @@ slam_bringup:
   # When relay owns TF: also publish odom->base_link at each LiDAR cloud stamp (topic below).
   lio_relay_auto_sync_tf_cloud: true
   lio_relay_sync_tf_cloud_topic: ""
-  # FAST-LIO ``body`` vs robot ``base_link`` (REP-103 +X forward). Use **180.0** when ``/ekf/path``
-  # ``+X`` points **aft** while driving **forward** (motion toward **negative** ``x``). This is **not**
-  # ``livox_extrinsic_yaw_deg`` (LiDAR cloud in ``base_link``). Set **0.0** if ``/ekf/path`` +X already matches nose.
+  # FAST-LIO ``body`` vs robot ``base_link`` (REP-103 +X forward). Relay uses **quaternion_multiply**
+  # (not Euler+yaw) so heading stays consistent with LiDAR ``(x,y)``. Set **0.0** if ``/ekf/path`` +X already matches nose.
   lio_relay_body_to_base_yaw_deg: 180.0
   # ~40 Hz effective /imu/data on typical GX5 @115200; use_stamp_dt still refines per step.
   ekf_nominal_dt: 0.025
   ekf_use_stamp_dt: true
   # null = keep predict_use_linear_accel from ekf_params_yaml (GX5 preset often false). true/false
   # forces override — true can strengthen translation for NDT TF guess on bag replay; false reduces accel junk when tilted/bumpy.
+  # If LiDAR odom heading is right but **path still walks backward**, try **false** to rely on LiDAR xy more than IMU accel integration.
   ekf_predict_use_linear_accel: null
   ekf_max_odom_tf_publish_rate_hz: 0.0
   ekf_imu_source_topic: /ekf/imu_source

@@ -30,11 +30,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sensor_msgs.msg import PointCloud2
 from tf2_ros import TransformBroadcaster
-from tf_transformations import euler_from_quaternion, quaternion_from_euler
-
-
-def _wrap_angle(a: float) -> float:
-    return math.atan2(math.sin(a), math.cos(a))
+from tf_transformations import quaternion_from_euler, quaternion_multiply
 
 
 def _rotate_twist_body_to_base(tw, yaw_rad: float) -> None:
@@ -53,16 +49,27 @@ def _rotate_twist_body_to_base(tw, yaw_rad: float) -> None:
 
 
 def _apply_body_to_base_yaw(msg: Odometry, yaw_rad: float) -> Odometry:
-    """Return a copy with pose + twist adjusted by fixed yaw about Z (body -> base_link)."""
+    """Return a copy with pose + twist adjusted by fixed yaw about Z (body -> base_link).
+
+    Orientation uses **quaternion_multiply** (post-multiply by R_z(yaw)): T_odom_base = T_odom_body
+    @ R_body_base. Do **not** add yaw to Euler-decomposed angles — that desynchronizes heading from
+    LiDAR position when roll/pitch are non-zero, so /ekf/path can look flipped vs the fused arrow.
+    """
     out = deepcopy(msg)
-    q = out.pose.pose.orientation
-    roll, pitch, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
-    yaw2 = _wrap_angle(float(yaw) + float(yaw_rad))
-    qx, qy, qz, qw = quaternion_from_euler(float(roll), float(pitch), float(yaw2))
-    out.pose.pose.orientation.x = float(qx)
-    out.pose.pose.orientation.y = float(qy)
-    out.pose.pose.orientation.z = float(qz)
-    out.pose.pose.orientation.w = float(qw)
+    if abs(yaw_rad) < 1e-9:
+        return out
+    q_in = [
+        float(msg.pose.pose.orientation.x),
+        float(msg.pose.pose.orientation.y),
+        float(msg.pose.pose.orientation.z),
+        float(msg.pose.pose.orientation.w),
+    ]
+    q_fix = quaternion_from_euler(0.0, 0.0, float(yaw_rad))
+    q_out = quaternion_multiply(q_in, q_fix)
+    out.pose.pose.orientation.x = float(q_out[0])
+    out.pose.pose.orientation.y = float(q_out[1])
+    out.pose.pose.orientation.z = float(q_out[2])
+    out.pose.pose.orientation.w = float(q_out[3])
     _rotate_twist_body_to_base(out.twist.twist, yaw_rad)
     return out
 
