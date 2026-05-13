@@ -293,8 +293,9 @@ slam_bringup:
   ekf_odom_frame: odom
   ekf_base_link_frame: base_link
   # Publish-only yaw on ``/ekf/odom``/pose/TF (not fusion). **Twist** is world→base_link at this heading.
-  # Use **180** if triad +X is aft; set **0** if motion/axis are both wrong (check twist fix in ekf_node first).
-  ekf_publish_base_link_yaw_offset_deg: 180.0
+  # IMPORTANT: if ``lio_relay_body_to_base_yaw_deg`` is non-zero, do NOT also set this to 180 (double-rotates).
+  # Use **180** only when motion is correct but RViz triad is backwards and relay yaw fix is 0.
+  ekf_publish_base_link_yaw_offset_deg: 0.0
   ekf_publish_tf: true
   # LIO: relay can publish odom->base_link TF (set true) so EKF does not — single authority.
   # Default false: relay TF is only ~LiDAR rate → sparse /tf vs EKF+cloud-stamp TF → tf2 interpolation
