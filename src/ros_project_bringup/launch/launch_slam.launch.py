@@ -313,7 +313,9 @@ def launch_setup(context, *args, **kwargs):
     ):
         print(
             '[launch_slam] WARNING: keyframe_apply_pose_graph_map and '
-            'pose_graph_publish_map_odom_tf are both true — risk of double correction.'
+            'pose_graph_publish_map_odom_tf are both true — double correction '
+            '(map cloud rebuild + dynamic map→odom). Prefer one: either '
+            'keyframe_apply_pose_graph_map only, or pose_graph_publish_map_odom_tf only.'
         )
 
     use_microstrain_imu = bool(U['use_microstrain_imu'])
