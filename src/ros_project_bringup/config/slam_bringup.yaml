@@ -117,7 +117,7 @@ slam_bringup:
   keyframe_deskew_cloud_stamp_offset_sec: 0.0
   # Loosen if deskew falls back during motion (less scan smear in turns; try 0.10–0.15).
   keyframe_deskew_max_imu_age_sec: 0.13
-  keyframe_deskew_imu_sign: -1.0
+  keyframe_deskew_imu_sign: 1.0
   keyframe_deskew_enable: true
   # true: deskew with same IMU as EKF (Microstrain) + gyro rotated into livox_frame; matches odom/NDT.
   # false: /livox/imu only — often smears the keyframe map when EKF uses Microstrain.
@@ -360,8 +360,8 @@ slam_bringup:
   keyframe_tf_lookup_timeout_sec: 0.25
   keyframe_tf_buffer_cache_sec: 180.0
   keyframe_deskew_imu_topic: /livox/imu
-  # Full 3D gyro deskew; helps translational smear under mild pitch/roll + mounting offsets.
-  keyframe_deskew_model: rodrigues
+  # For residual rotational (yaw) smear, keep deskew in planar yaw mode.
+  keyframe_deskew_model: yaw_only
   keyframe_deskew_imu_buffer_max_samples: 768
   keyframe_deskew_imu_interpolate: true
   keyframe_deskew_mean_gyro_fallback: true
