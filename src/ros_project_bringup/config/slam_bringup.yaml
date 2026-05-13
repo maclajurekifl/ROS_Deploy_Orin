@@ -6,10 +6,11 @@
 # Knob list matches docs/tuning.md (§1–9). Suggested values + what each does: docs/tuning.md
 # All other keys: “REST OF BRINGUP” below.
 #
-# Default profile: all sensors over DDS — use `launch_sensors:=false` (launch default). GX5 → EKF;
-# Livox IMU → deskew; **FAST-LIO** odometry (`use_lio: true`, `use_lidar_fusion: false`). For PCL NDT instead,
-# set `use_lio: false` and `use_lidar_fusion: true` (or use `config/livox_ndt_bag_axes_overlay.yaml`).
-# Set `microstrain_imu_origin: local` only on a host that runs the GX5 serial driver (`launch_sensors:=true`).
+# Default profile: **live robot + SLAM on robot**, sensors and RViz elsewhere (`launch_sensors:=false`,
+# `start_rviz: false`, `use_sim_time` launch default false). Livox + Microstrain run from robot bringup;
+# this launch only starts SLAM nodes. **FAST-LIO** (`use_lio: true`, `use_lidar_fusion: false`).
+# For PCL NDT: `use_lio: false` and `use_lidar_fusion: true` (or `config/livox_ndt_bag_axes_overlay.yaml`).
+# Set `microstrain_imu_origin: local` only when this host runs the GX5 USB driver (`launch_sensors:=true`).
 # Livox `/livox/imu` in this workspace’s driver uses the same `frame_id` as the cloud (`livox_cloud_frame_id`).
 # `keyframe_deskew_imu_rotate_gyro_to_frame` must match that cloud frame so ω is rotated before deskew.
 # When the local Livox driver is off (`launch_sensors:=false`), launch publishes identity TF
@@ -21,10 +22,9 @@
 # Default `livox_extrinsic_yaw_deg` is **0** (typical bag laptop + forward Livox vs base +X). Reversed sensor:
 # merge `config/livox_extrinsic_yaw_180_overlay.yaml` via bringup_config, or set `ROS_PROJECT_SLAM_CONFIG` to
 # a machine YAML that overrides `livox_extrinsic_*` / `imu_mount_*` to match CAD.
-# `use_sim_time` is set on every node by `launch_slam.launch.py` from the launch arg (default true).
-# Live robot (wall clock): `ros2 launch ... use_sim_time:=false`.
-# Bag replay: start `launch_slam` *before* `ros2 bag play ... --clock`. Bag-first can yield a flipped
-# / mirrored map (first registration without a consistent TF + sim clock from bag t=0).
+# `use_sim_time` is set from the launch arg (default **false** = wall clock). Bag replay: pass
+# ``use_sim_time:=true`` and play with ``ros2 bag play ... --clock``. Start `launch_slam` *before* the bag
+# so `/clock` does not advance ahead of the stack (avoids flipped / mirrored first alignment).
 # -----------------------------------------------------------------------------
 
 slam_bringup:
@@ -49,10 +49,10 @@ slam_bringup:
   microstrain_sensor_alias_pitch_deg: 0.0
   # Rotation imu_link → GX5 `frame_id` (often `sensor`). Non-zero here + wrong imu_mount_yaw → wrong ωz in base_link → spin.
   microstrain_sensor_alias_yaw_deg: 0.0
-  # When launch_sensors:=false, publish ``imu_mount_*`` and Livox extrinsic static TFs from this YAML if true
-  # (typical bag replay: no ``base_link``→``imu_link`` / ``livox_frame`` on /tf_static). Set false if your bag
-  # or DDS robot already publishes those transforms (avoid duplicates).
-  publish_robot_static_tf_when_sensors_off: true
+# When launch_sensors:=false, publish ``imu_mount_*`` and Livox extrinsic static TFs from this YAML if true
+# (bag replay / laptop with no robot /tf_static). **false** when the robot already publishes the same
+# mounts on ``/tf_static`` (typical: Livox + Microstrain started at boot) — avoids duplicate publishers.
+  publish_robot_static_tf_when_sensors_off: false
 
   # Odometry front-end: FAST-LIO (default) vs PCL NDT (`use_lidar_fusion: true`, `use_lio: false`).
   # Launch still allows `use_lio:=true|false` / `use_lidar_fusion:=...` to override merged YAML.
@@ -146,8 +146,10 @@ slam_bringup:
   # Restore -90 (or other) only if CAD/driver frame differs — see docs/imu_mount_note.md.
   imu_mount_yaw_deg: 0.0
 
+  # Livox node from this launch only when ``launch_sensors:=true`` (ignored when sensors off).
   start_livox_driver: true
-  start_rviz: true
+  # RViz on this machine; use false when RViz runs on another PC (same ``ROS_DOMAIN_ID``).
+  start_rviz: false
   start_keyframe_map: true
   # Disable loop closure / pose graph while front-end (NDT + EKF) is being validated against FAST-LIO.
   keyframe_loop_closure_enable: true
@@ -172,7 +174,9 @@ slam_bringup:
   livox_imu_bridge_roll_deg: 0.0
   livox_imu_bridge_pitch_deg: 0.0
   livox_imu_bridge_yaw_deg: 0.0
-  publish_livox_imu_sensor_frame_tf: true
+  # false when Livox driver (robot bringup) already publishes ``livox_frame``→``livox_imu_child_frame``;
+  # true for bag replay / no TF for that link.
+  publish_livox_imu_sensor_frame_tf: false
 
   lidar_cloud_topic: /livox/lidar
   # When lidar_odom_smooth_enable is true, NDT publishes raw here; smoothed poses go to lidar_odom_topic.

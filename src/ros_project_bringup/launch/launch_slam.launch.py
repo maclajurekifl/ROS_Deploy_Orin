@@ -34,23 +34,30 @@ or the FAST_LIO base file.
 in that file). Optional: **``bringup_config``** launch arg or **``ROS_PROJECT_SLAM_CONFIG``** env
 points to a *partial* YAML (merged over the installed default — convenient in Docker).
 
-**``launch_sensors``** (launch argument, default ``false``): when ``false`` (typical laptop / DDS), this
-machine does **not** start the Livox driver, Microstrain driver, or sensor static TFs — all sensors and
-TFs are expected on **DDS** (same ``ROS_DOMAIN_ID``) from the robot or a bag. Set ``launch_sensors:=true``
-on the **robot** (or any host with USB LiDAR / GX5) to start drivers and publish mount static TFs here.
-**Microstrain IMU origin** (``slam_bringup.yaml`` ``microstrain_imu_origin``): ``robot`` = subscribe to
-``microstrain_imu_topic`` over DDS only (default with ``launch_sensors:=false``). ``local`` = start the
-serial driver on **this** host when ``launch_sensors`` is true; mount TF is published here with the driver.
+**``launch_sensors``** (launch argument, default ``false``): when ``false``, this launch does **not**
+start Livox / Microstrain drivers. Sensors and (usually) ``/tf_static`` come from **robot bringup** on
+the same machine or over DDS (same ``ROS_DOMAIN_ID``). Set ``launch_sensors:=true`` to start drivers
+here (e.g. all-in-one dev machine).
 
-**Single command (SLAM on laptop / DDS, default):**
+**Microstrain IMU origin** (``slam_bringup.yaml`` ``microstrain_imu_origin``): ``robot`` = subscribe to
+``microstrain_imu_topic`` only (typical with ``launch_sensors:=false``). ``local`` = start the serial
+driver on **this** host when ``launch_sensors`` is true.
+
+**``use_sim_time``** (launch argument, default ``false``): wall clock for live robot. Bag replay:
+``use_sim_time:=true`` then ``ros2 bag play <bag> --clock``.
+
+**``start_rviz``** (launch arg, optional): non-empty overrides YAML ``start_rviz`` (default **false** —
+run RViz on another PC on the same domain).
+
+**Single command (live SLAM, typical robot + second PC for RViz):**
   ``ros2 launch ros_project_bringup launch_slam.launch.py``
 
-**Robot with local USB sensors:** ``ros2 launch ros_project_bringup launch_sensors:=true`` (and set
-``microstrain_imu_origin: local`` in ``slam_bringup.yaml`` on that machine).
+**Robot with local USB sensors in this launch:** ``ros2 launch ros_project_bringup launch_slam.launch.py launch_sensors:=true``
+  (and ``microstrain_imu_origin: local`` in YAML on that machine).
 
-**Bag replay (laptop):** play with ``ros2 bag play <bag> --clock``. ``use_sim_time`` defaults to **true**
-on all nodes (override with ``use_sim_time:=false`` for live wall-clock on the robot). The bag should carry
-``/tf`` / ``/tf_static`` (or enable ``launch_sensors`` for static TFs only if your bag lacks them).
+**Bag replay:** ``ros2 launch ros_project_bringup launch_slam.launch.py use_sim_time:=true`` then play the bag.
+If the bag lacks ``/tf_static``, use a bringup overlay with ``publish_robot_static_tf_when_sensors_off: true``
+(and often ``publish_livox_imu_sensor_frame_tf: true``).
 
 **Start order (bag replay):** launch **``launch_slam`` first**, wait until nodes (and RViz if used) are up,
 then start ``ros2 bag play ... --clock``. If the bag runs **first**, ``/clock`` advances while the stack is
@@ -1081,10 +1088,10 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time',
-            default_value='true',
+            default_value='false',
             description=(
-                'If true (default): all nodes use /clock — use with `ros2 bag play ... --clock`. '
-                'Set false for live robot (wall clock).'
+                'If true: all nodes use /clock — use with `ros2 bag play ... --clock`. '
+                'Default false: live robot wall clock.'
             ),
         ),
         GroupAction(
