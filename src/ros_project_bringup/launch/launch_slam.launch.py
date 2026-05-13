@@ -940,6 +940,9 @@ def launch_setup(context, *args, **kwargs):
             'loop_overlap_ratio': float(U.get('keyframe_loop_overlap_ratio', 0.32)),
             'loop_cooldown_sec': float(U.get('keyframe_loop_cooldown_sec', 6.0)),
             'apply_pose_graph_corrections': kf_apply_pg,
+            'map_batch_store_voxel_m': float(
+                U.get('keyframe_map_batch_store_voxel_m', 0.32) or 0.32
+            ),
             'map_publish_min_interval_sec': float(
                 U['keyframe_map_publish_min_interval_sec']
             ),

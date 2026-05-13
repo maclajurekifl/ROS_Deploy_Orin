@@ -124,14 +124,22 @@ slam_bringup:
   keyframe_min_dist_m: 0.18
   keyframe_min_yaw_deg: 4.0
   keyframe_min_time_sec: 0.6
-  keyframe_voxel_leaf_m: 0.07
-  keyframe_max_map_points: 800000
+  # Final merge voxel for ``/keyframe_map`` (centroid per cell). Smaller → sharper walls, more points.
+  keyframe_voxel_leaf_m: 0.06
+  keyframe_max_map_points: 1200000
   keyframe_max_pts_per_scan: 50000
+  # With ``keyframe_apply_pose_graph_map: true``, each keyframe is stored at this voxel **before** pose-graph warp.
+  # Package default 0.32 m is sparse on Livox; **0.12–0.18** restores detail (more RAM). Independent of ``keyframe_voxel_leaf_m`` merge step.
+  keyframe_map_batch_store_voxel_m: 0.16
 
+  # Odom edges vs loop closure: high ``pose_graph_weight_loop`` can skew the map if a loop is soft/wrong.
+  # If map twists after revisiting a place: lower loop weight (e.g. 40) or tighten ``keyframe_loop_overlap_ratio``.
   pose_graph_weight_odom: 12.0
-  pose_graph_weight_loop: 55.0
+  pose_graph_weight_loop: 48.0
   pose_graph_max_nodes: 500
   pose_graph_max_loop_edges: 40
+  # Stricter overlap → fewer false loop edges (see launch_slam keyframe_overrides).
+  keyframe_loop_overlap_ratio: 0.36
 
   # ===========================================================================
   # REST OF BRINGUP (required by launch_slam.launch.py)
