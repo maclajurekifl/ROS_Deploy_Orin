@@ -338,6 +338,8 @@ slam_bringup:
   keyframe_lidar_odom_max_age_sec: 0.015
   keyframe_lidar_odom_approximate_sync: true
   keyframe_lidar_odom_approx_sync_slop_sec: 0.004
+  # Small queue + shallow LiDAR sub QoS avoids multi-second backlog when deskew is CPU-heavy.
+  keyframe_lidar_odom_approx_sync_queue_size: 10
   # Sensor-frame prefilter: remove very near self-hits (RTK mast/chassis), far clutter, weak returns.
   keyframe_prefilter_min_range_m: 0.4
   keyframe_prefilter_max_range_m: 12.0
@@ -362,7 +364,8 @@ slam_bringup:
   keyframe_deskew_imu_topic: /livox/imu
   # For residual rotational (yaw) smear, keep deskew in planar yaw mode.
   keyframe_deskew_model: yaw_only
-  keyframe_deskew_imu_buffer_max_samples: 768
+  # ~1.3 s at 200 Hz — enough for a sweep; very large buffers widen IMU time span unnecessarily.
+  keyframe_deskew_imu_buffer_max_samples: 256
   keyframe_deskew_imu_interpolate: true
   keyframe_deskew_mean_gyro_fallback: true
   keyframe_deskew_imu_rotate_gyro_to_frame: livox_frame

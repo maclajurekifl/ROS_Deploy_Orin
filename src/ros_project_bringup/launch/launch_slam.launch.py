@@ -1016,6 +1016,9 @@ def launch_setup(context, *args, **kwargs):
             'lidar_odom_approx_sync_slop_sec': float(
                 U.get('keyframe_lidar_odom_approx_sync_slop_sec', 0.08)
             ),
+            'lidar_odom_approx_sync_queue_size': int(
+                U.get('keyframe_lidar_odom_approx_sync_queue_size', 10)
+            ),
             'prefilter_min_range_m': float(U.get('keyframe_prefilter_min_range_m', 0.5)),
             'prefilter_max_range_m': float(U.get('keyframe_prefilter_max_range_m', 20.0)),
             'prefilter_self_radius_m': float(U.get('keyframe_prefilter_self_radius_m', 0.5)),

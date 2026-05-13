@@ -42,8 +42,9 @@ from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32, Int32MultiArray, UInt32
 
 # Livox (and most rclcpp default publishers) use Reliable; sensor_data (Best Effort) will not match.
+# Small depth: long deskew callbacks + ApproximateTime sync must not backlog many seconds of clouds.
 _LIDAR_SUB_QOS = QoSProfile(
-    depth=50,
+    depth=12,
     reliability=ReliabilityPolicy.RELIABLE,
     history=HistoryPolicy.KEEP_LAST,
     durability=DurabilityPolicy.VOLATILE,
@@ -524,6 +525,7 @@ class KeyframeMapNode(Node):
         # Pair cloud + /lidar/odom by stamp (avoids processing cloud before matching odom arrives).
         self.declare_parameter('lidar_odom_approximate_sync', True)
         self.declare_parameter('lidar_odom_approx_sync_slop_sec', 0.08)
+        self.declare_parameter('lidar_odom_approx_sync_queue_size', 10)
         # Prefilter in sensor frame to remove self-hits / distant clutter before map insertion.
         self.declare_parameter('prefilter_min_range_m', 0.5)
         self.declare_parameter('prefilter_max_range_m', 20.0)
@@ -654,6 +656,9 @@ class KeyframeMapNode(Node):
         self._lidar_odom_sync_slop = max(
             0.0, float(self.get_parameter('lidar_odom_approx_sync_slop_sec').value)
         )
+        self._lidar_odom_sync_q = max(
+            2, int(self.get_parameter('lidar_odom_approx_sync_queue_size').value)
+        )
         self._pf_min_r = max(0.0, float(self.get_parameter('prefilter_min_range_m').value))
         self._pf_max_r = max(self._pf_min_r, float(self.get_parameter('prefilter_max_range_m').value))
         self._pf_self_r = max(0.0, float(self.get_parameter('prefilter_self_radius_m').value))
@@ -767,7 +772,7 @@ class KeyframeMapNode(Node):
             )
             self._ts_cloud_odom = message_filters.ApproximateTimeSynchronizer(
                 [sub_cloud, sub_odom],
-                queue_size=40,
+                queue_size=self._lidar_odom_sync_q,
                 slop=self._lidar_odom_sync_slop,
             )
             self._ts_cloud_odom.registerCallback(self._on_cloud_odom_synced)
@@ -845,7 +850,7 @@ class KeyframeMapNode(Node):
             f'loop_closure={self._loop_enable} apply_pg_map={self._apply_pg} '
             f'map_pub_min_s={self._map_pub_min_ns * 1e-9:.2f} tf_latest_fallback={self._tf_allow_latest_fallback} '
             f'lidar_odom_pose={self._use_lidar_odom_pose}({self._lidar_odom_topic or "off"})'
-            f'{" approx_sync=" + str(self._lidar_odom_sync_slop) + "s" if self._use_lidar_odom_sync else ""} '
+            f'{" approx_sync=" + str(self._lidar_odom_sync_slop) + "s q=" + str(self._lidar_odom_sync_q) if self._use_lidar_odom_sync else ""} '
             f'deskew={self._deskew_enable}({self._deskew_model}) interp={self._deskew_interp} '
             f'imu_off={self._deskew_imu_stamp_off:g}s cloud_off={self._deskew_cloud_stamp_off:g}s '
             f'imu_buf={_buf_max} rot_adapt={self._rot_adapt} '
