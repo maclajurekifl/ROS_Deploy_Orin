@@ -19,6 +19,7 @@ correction — see README.
 from __future__ import annotations
 
 import math
+from copy import deepcopy
 from collections import deque
 from typing import Deque, List, Optional, Tuple
 
@@ -511,6 +512,8 @@ class KeyframeMapNode(Node):
         self.declare_parameter('map_batch_store_voxel_m', 0.32)
         # Min wall time between full /keyframe_map publishes (map still merges every keyframe).
         self.declare_parameter('map_publish_min_interval_sec', 0.0)
+        # Skip first N point clouds before any keyframe (TF/LIO/FAST-LIO IMU init — avoids ghost first scan).
+        self.declare_parameter('warmup_clouds_to_skip', 0)
         # If false, skip keyframe when TF at cloud stamp is missing (avoids livox vs pose mismatch).
         self.declare_parameter('tf_allow_latest_fallback', True)
         # Use /lidar/odom (or NDT/LIO topic) for T_odom<-base at cloud time; only TF for map<-odom
@@ -624,6 +627,9 @@ class KeyframeMapNode(Node):
         self._map_batch_leaf = float(self.get_parameter('map_batch_store_voxel_m').value)
         self._map_pub_min_ns = int(
             float(self.get_parameter('map_publish_min_interval_sec').value) * 1e9
+        )
+        self._warmup_skip = max(
+            0, int(self.get_parameter('warmup_clouds_to_skip').value)
         )
         self._tf_allow_latest_fallback = bool(
             self.get_parameter('tf_allow_latest_fallback').value
@@ -818,6 +824,7 @@ class KeyframeMapNode(Node):
         # Persistent map-level correction (roll/pitch) applied to all future inserts/poses.
         self._level_R = np.eye(3, dtype=np.float64)
         self._last_pg_applied: Optional[np.ndarray] = None
+        self._pg_path_pending: Optional[Path] = None
 
         if self._apply_pg:
             self.create_subscription(Path, self._pg_path_topic, self._on_pose_graph_path, 10)
@@ -848,6 +855,11 @@ class KeyframeMapNode(Node):
             f'i={("on" if self._pf_i_en else "off")} sor={("on" if self._pf_sor_en else "off")}] '
             f'deskew_gyro_max={self._deskew_max_gyro_norm:g}rad/s '
             f'tf_cache={self._tf_cache_sec:.0f}s tf_future_fallback={self._tf_future_extrap_latest}'
+            + (
+                f' warmup_skip_clouds={self._warmup_skip}'
+                if self._warmup_skip > 0
+                else ''
+            )
         )
 
     def _cloud_stamp_adjusted(self, msg: PointCloud2) -> Time:
@@ -1531,22 +1543,14 @@ class KeyframeMapNode(Node):
                 self._map_pts, self._map_intensity, self._voxel * 1.5
             )
 
-    def _on_pose_graph_path(self, msg: Path) -> None:
-        if not self._apply_pg:
-            return
-        if len(msg.poses) < 2:
-            return
+    def _apply_pose_graph_path_msg(self, msg: Path) -> None:
+        """Apply corrected poses to batches and republish map (all lengths must match)."""
         n = len(self._kf_poses)
         if (
             n < 2
             or len(msg.poses) != n
             or len(self._kf_map_batches) != n
         ):
-            self.get_logger().warn(
-                f'pose_graph path len {len(msg.poses)} vs keyframes {n} '
-                f'batches {len(self._kf_map_batches)} — skip map rebuild',
-                throttle_duration_sec=5.0,
-            )
             return
         P_old = np.array(
             [[float(x), float(y), float(yw)] for x, y, yw in self._kf_poses],
@@ -1566,8 +1570,6 @@ class KeyframeMapNode(Node):
             T_rel = T_new @ la.inv(T_old)
             b = transform_points_se2(T_rel, self._kf_map_batches[i])
             rebuilt.append(b.astype(np.float32))
-        # Persist warped geometry — previously ``rebuilt`` was merged for display but batches
-        # stayed pre-warp, so the next pose-graph solve applied wrong T_rel (layered walls).
         self._kf_map_batches = rebuilt
         self._kf_poses = [
             (float(P_new[i, 0]), float(P_new[i, 1]), float(P_new[i, 2]))
@@ -1597,6 +1599,58 @@ class KeyframeMapNode(Node):
             f'Pose graph applied to map: {n} keyframes, {self._map_pts.shape[0]} map pts'
         )
 
+    def _try_apply_pending_pose_graph(self) -> None:
+        """Apply stashed /pose_graph/corrected_keyframes once keyframe count catches up."""
+        if not self._apply_pg or self._pg_path_pending is None:
+            return
+        msg = self._pg_path_pending
+        n = len(self._kf_poses)
+        if (
+            len(msg.poses) == n
+            and len(self._kf_map_batches) == n
+            and n >= 2
+        ):
+            self._pg_path_pending = None
+            self._apply_pose_graph_path_msg(msg)
+
+    def _on_pose_graph_path(self, msg: Path) -> None:
+        if not self._apply_pg:
+            return
+        if len(msg.poses) < 2:
+            return
+        n = len(self._kf_poses)
+        m = len(msg.poses)
+        if n < 2:
+            return
+        if len(self._kf_map_batches) != n:
+            self.get_logger().warn(
+                f'pose_graph path m={m} but keyframe batches {len(self._kf_map_batches)} '
+                f'!= poses {n} — skip',
+                throttle_duration_sec=5.0,
+            )
+            return
+        if m == n:
+            self._pg_path_pending = None
+            self._apply_pose_graph_path_msg(msg)
+        elif m < n:
+            prev = (
+                0
+                if self._pg_path_pending is None
+                else len(self._pg_path_pending.poses)
+            )
+            if m > prev:
+                self._pg_path_pending = deepcopy(msg)
+            self.get_logger().info(
+                f'pose_graph path len {m} lags keyframes {n}; '
+                f'stashed (best pending len {max(prev, m)}); apply when counts match',
+                throttle_duration_sec=2.0,
+            )
+        else:
+            self.get_logger().warn(
+                f'pose_graph path len {m} > keyframes {n}; ignoring',
+                throttle_duration_sec=5.0,
+            )
+
     def _on_cloud_odom_synced(self, cloud_msg: PointCloud2, odom_msg: Odometry) -> None:
         self._process_cloud(cloud_msg, odom_msg)
 
@@ -1612,6 +1666,13 @@ class KeyframeMapNode(Node):
                 f'Receiving point clouds (frame_id={msg.header.frame_id!r}); '
                 'building keyframe map when TF allows'
             )
+        if self._warmup_skip > 0 and self._cloud_rx_count <= self._warmup_skip:
+            if self._cloud_rx_count == 1:
+                self.get_logger().info(
+                    f'warmup: skipping first {self._warmup_skip} point clouds '
+                    '(static TF / FAST-LIO IMU init / body→base relay settle)'
+                )
+            return
         cf = (msg.header.frame_id or '').strip()
         if (
             self._deskew_rotate_gyro_to
@@ -1703,6 +1764,7 @@ class KeyframeMapNode(Node):
                 self._map_pts, self._map_intensity, self._voxel
             )
         self._apply_auto_level_if_ready()
+        self._try_apply_pending_pose_graph()
 
         now_mono = self.get_clock().now().nanoseconds
         do_pub = self._map_pub_min_ns <= 0 or (

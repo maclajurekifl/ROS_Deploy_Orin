@@ -61,6 +61,7 @@ keyframe_map_node:
     apply_pose_graph_corrections: true
     map_batch_store_voxel_m: 0.32
     map_publish_min_interval_sec: 0.0
+    warmup_clouds_to_skip: 0
 
     tf_allow_latest_fallback: false
     tf_future_extrapolation_use_latest: true

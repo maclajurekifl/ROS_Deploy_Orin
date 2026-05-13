@@ -946,6 +946,9 @@ def launch_setup(context, *args, **kwargs):
             'map_publish_min_interval_sec': float(
                 U['keyframe_map_publish_min_interval_sec']
             ),
+            'warmup_clouds_to_skip': int(
+                U.get('keyframe_warmup_clouds_to_skip', 0) or 0
+            ),
             'tf_allow_latest_fallback': bool(U['keyframe_tf_allow_latest_fallback']),
             'tf_future_extrapolation_use_latest': bool(
                 U['keyframe_tf_future_extrapolation_use_latest']

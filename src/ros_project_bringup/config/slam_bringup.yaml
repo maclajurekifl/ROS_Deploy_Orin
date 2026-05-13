@@ -252,11 +252,13 @@ slam_bringup:
   # After static TFs: delay ``ekf_node`` so tf2 has ``base_link``→``imu_link`` (and Livox mounts) before
   # first IMU / deskew lookups — avoids transient "frame does not exist" and TF stamp races at startup.
   # Set **0.0** if you need EKF from the first instant (e.g. tests).
-  ekf_node_start_delay_sec: 2.0
-  # Start after ``ekf_node`` so ``/ekf/odom`` + ``map``→``odom`` (pose graph) exist before keyframe TF queries.
-  keyframe_map_node_start_delay_sec: 3.0
-  # Default: same as keyframe (omit key to inherit). Pose graph stamps ``map``→``odom`` from ``/ekf/odom``.
-  pose_graph_node_start_delay_sec: 3.0
+  ekf_node_start_delay_sec: 3.0
+  # After EKF + /lidar/odom: static map→odom exists; FAST-LIO + relay + lidar link TF should be stable.
+  keyframe_map_node_start_delay_sec: 8.0
+  # Run after keyframe so /keyframe_map/keyframes exists before first subscribe.
+  pose_graph_node_start_delay_sec: 10.0
+  # Drop first N Livox clouds before any keyframe (Jetson: avoids flipped ghost from TF/IMU init races).
+  keyframe_warmup_clouds_to_skip: 5
   lidar_map_merge_voxel_leaf_size: -1.0
   lidar_map_max_points: 200000
   # scan_to_map: every N successful NDT steps, rebuild target map from last K aligned scans (0=off).
@@ -275,6 +277,7 @@ slam_bringup:
   lidar_ndt_gate_until_prior_translation_m: 0.0
   lidar_ndt_gate_force_after_sec: 10.0
 
+  # ``auto`` → true with LIO (fuses z + full pose); then ``ekf_lidar_fuse_xy_only`` is ignored. Use **false** for planar + xy_only.
   ekf_lidar_fuse_z_from_odom: auto
   ekf_lidar_odom_topic: /lidar/odom
   ekf_lidar_pose_topic: ""
