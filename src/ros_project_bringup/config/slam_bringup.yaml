@@ -190,7 +190,8 @@ slam_bringup:
   livox_extrinsic_z: 0.38
   livox_extrinsic_roll_deg: 0.0
   livox_extrinsic_pitch_deg: 0.0
-  livox_extrinsic_yaw_deg: 0.0
+  # LiDAR is mounted facing backwards: rotate base_link -> livox_frame by 180° about +Z.
+  livox_extrinsic_yaw_deg: 180.0
   livox_cloud_frame_id: livox_frame
   # Child frame for TF livox_cloud_frame_id → child (default `livox_imu`). Not `sensor` — see header comment.
   livox_imu_child_frame: livox_imu
@@ -306,7 +307,8 @@ slam_bringup:
   lio_relay_sync_tf_cloud_topic: ""
   # FAST-LIO ``body`` vs robot ``base_link`` (REP-103 +X forward). Relay uses **quaternion_multiply**
   # (not Euler+yaw) so heading stays consistent with LiDAR ``(x,y)``. Set **0.0** if ``/ekf/path`` +X already matches nose.
-  lio_relay_body_to_base_yaw_deg: 180.0
+  # With LiDAR extrinsic yaw fixed above, FAST-LIO body should align with base_link; keep relay yaw at 0.
+  lio_relay_body_to_base_yaw_deg: 0.0
   # ~40 Hz effective /imu/data on typical GX5 @115200; use_stamp_dt still refines per step.
   ekf_nominal_dt: 0.025
   ekf_use_stamp_dt: true
