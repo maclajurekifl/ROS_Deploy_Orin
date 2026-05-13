@@ -261,7 +261,7 @@ slam_bringup:
   # Run after keyframe so /keyframe_map/keyframes exists before first subscribe.
   pose_graph_node_start_delay_sec: 10.0
   # Drop first N Livox clouds before any keyframe (Jetson: avoids flipped ghost from TF/IMU init races).
-  keyframe_warmup_clouds_to_skip: 5
+  keyframe_warmup_clouds_to_skip: 12
   lidar_map_merge_voxel_leaf_size: -1.0
   lidar_map_max_points: 200000
   # scan_to_map: every N successful NDT steps, rebuild target map from last K aligned scans (0=off).
@@ -377,8 +377,8 @@ slam_bringup:
   keyframe_reject_unstable_frame_max_translation_m: 1.0
   keyframe_reject_unstable_frame_max_yaw_deg: 45.0
   keyframe_auto_level_enable: true
-  keyframe_auto_level_min_keyframes: 8
-  keyframe_auto_level_min_points: 1500
+  keyframe_auto_level_min_keyframes: 4
+  keyframe_auto_level_min_points: 900
   keyframe_auto_level_max_points: 20000
   keyframe_auto_level_ransac_iters: 140
   keyframe_auto_level_plane_dist_thresh_m: 0.08
