@@ -1,0 +1,6 @@
+# F3 — light smoothing (snappier; expect more micro-jitter if α is too high)
+slam_bringup:
+  lidar_odom_smooth_enable: true
+  lidar_odom_smooth_mode: full
+  lidar_odom_smooth_alpha_pose: 0.26
+  lidar_odom_smooth_alpha_twist_linear: 0.30

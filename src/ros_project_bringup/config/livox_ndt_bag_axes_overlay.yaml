@@ -1,0 +1,58 @@
+# NDT bag replay overlay — forces PCL NDT (overrides package default FAST-LIO when this file is merged).
+# **EKF uses /imu/data** in `header.frame_id` (often `sensor`): rotation
+# `imu_link`→`sensor` is `microstrain_sensor_alias_*`. That affects ω in **base_link** as much as `imu_mount_*`.
+# Start aliases at **0**; add ±90° only if a specific bag’s GX5 frame convention requires it.
+#
+# EKF fuses **raw** NDT odom (not EMA-smoothed /lidar/odom) so pose does not lag/fight the filter; keep
+# lidar_odom_smooth_enable true if you still want /lidar/odom for RViz/tools.
+slam_bringup:
+  use_lio: false
+  use_lidar_fusion: true
+  # Keyframe map uses EKF IMU for deskew (see slam_bringup); explicit here for bag replay clarity.
+  keyframe_deskew_imu_follow_ekf: true
+  livox_extrinsic_yaw_deg: 180.0
+  livox_imu_bridge_yaw_deg: 180.0
+  microstrain_sensor_alias_yaw_deg: 0.0
+  ekf_lidar_odom_topic: /lidar/odom_raw
+  # Trust NDT pose more than "loose" R: large lidar_pose_var => tiny Kalman gain once P has
+  # shrunk ⇒ EKF barely moves while NDT jumps (pipeline_translation_debug ratio_ekf/lidar << 1).
+  ekf_lidar_pose_var: 0.015
+  # Smaller → EKF follows NDT yaw more (see slam_bringup comment). Raise if LiDAR heading is noisy.
+  ekf_lidar_yaw_var: 0.018
+  ekf_lidar_fusion_debug_log: true
+  ekf_lidar_fusion_debug_throttle_sec: 2.0
+  # Ignore NDT yaw in EKF (noisy scan matching); fix stationary drift with ekf_imu_gyro_z_bias_rad_s.
+  ekf_lidar_fuse_xy_only: true
+  # Keep 0 when auto bias is on (below). Otherwise set mean stationary ωz after TF.
+  ekf_imu_gyro_z_bias_rad_s: 0.0
+  ekf_imu_auto_gyro_z_bias_enable: true
+  ekf_imu_auto_gyro_z_bias_tune_sec: 5.0
+  # Still permissive for scan_to_map jitter; raise if you see frequent LiDAR fuse rejects in logs.
+  ekf_lidar_gate_nis: 64.0
+  # false: gyro-only prediction between LiDAR steps (GX5 preset); true can add bogus translation if IMU axes don’t match planar model.
+  ekf_predict_use_linear_accel: false
+  # Finer structure + smaller LM step + more iterations (reduce rotation-only NDT basins on Livox).
+  lidar_voxel_leaf_size: 0.15
+  lidar_ndt_resolution: 0.65
+  # Tighter NDT cells need more points per voxel / stronger inflation if rosout still shows invalid eigen.
+  lidar_ndt_voxel_min_points: 12
+  lidar_ndt_voxel_cov_eig_inflation_ratio: 0.08
+  lidar_ndt_step_size: 0.05
+  lidar_ndt_max_iterations: 55
+  # Coarse → fine NDT (translation basins); ~1.0–1.5 typical for Livox at ~0.5 fine resolution.
+  lidar_ndt_coarse_resolution: 1.2
+  lidar_scan_to_map_register_sensor_frame: true
+  lidar_use_tf_initial_guess: false
+  lidar_ndt_gate_until_prior_translation_m: 0.0
+  lidar_log_accumulated_pose: true
+  lidar_log_ndt_relative: true
+  # true: blend NDT yaw toward motion prior (reduces scan-matching yaw noise / diagonal drift); weight → prior.
+  lidar_ndt_fuse_prior_planar_yaw: true
+  lidar_ndt_prior_yaw_blend: 0.9
+  lidar_ndt_fallback_if_planar_correction_below_m: 0.03
+  # Stricter spin-without-translation guard (was 0.5 rad / 0.1 m in package default).
+  lidar_ndt_corridor_spin_yaw_min_rad: 0.2
+  lidar_ndt_corridor_spin_max_corr_xy_m: 0.05
+  lidar_ndt_reject_opposite_ekf_step: true
+  lidar_map_merge_keyframe_min_translation_m: 0.3
+  lidar_map_merge_keyframe_min_yaw_deg: 10.0

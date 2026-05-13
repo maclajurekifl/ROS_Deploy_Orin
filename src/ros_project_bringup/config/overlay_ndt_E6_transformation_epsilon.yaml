@@ -1,0 +1,10 @@
+# NDT E6 — bag replay: tighter LM stop (single knob vs slam_bringup.yaml).
+# Baseline lidar_ndt_transformation_epsilon 0.01 → 0.006 (stricter convergence).
+# If NDT logs show thrashing or slower scans, try 0.014 instead (separate overlay).
+#
+# Terminal 1:
+#   export OVR=$(ros2 pkg prefix ros_project_bringup)/share/ros_project_bringup/config/overlay_ndt_E6_transformation_epsilon.yaml
+#   ros2 launch ros_project_bringup launch_slam.launch.py launch_sensors:=false bringup_config:=$OVR
+# Terminal 5: --out-dir /tmp/bench_50s_lockwin_ndt_E6_epsilon
+slam_bringup:
+  lidar_ndt_transformation_epsilon: 0.006

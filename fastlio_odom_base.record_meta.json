@@ -1,0 +1,13 @@
+{
+  "topic": "/Odometry",
+  "tf_projection": true,
+  "output_parent_frame_requested": "odom",
+  "effective_spatial_parent": "odom",
+  "output_child_frame": "base_link",
+  "used_odom_missing_fallback": false,
+  "tf_timeout_sec": 0.35,
+  "tf_rows_pose_projected_ok": 0,
+  "tf_rows_fallback_raw": 0,
+  "csv_rows": 0,
+  "note": "When used_odom_missing_fallback is true, CSV xy is in camera_init (same as FAST-LIO header), not odom. Publish static odom->camera_init for true odom CSV. When tf_rows_fallback_raw is high, body->base_link or TF chain failed."
+}

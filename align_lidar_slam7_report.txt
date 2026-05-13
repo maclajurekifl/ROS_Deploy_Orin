@@ -1,0 +1,16 @@
+align_xy: rigid SE(2) fit of TEST -> REF in the horizontal plane
+Reference: FAST-LIO (/home/macla/ROS_Deployment/fastlio.csv)
+Test:      LiDAR (/home/macla/ROS_Deployment/slam_lidar7.csv)
+
+Overlap t_rel: [30.100, 79.900] s, samples=600
+Fit: rotate test by theta=-170.30 deg, then translate by t=(+0.4586, +0.0315) m
+(theta is applied about the centroid of the interpolated TEST path, then shift matches REF centroid)
+
+RMSE_xy (same t_rel, no fit):     2.4907 m
+RMSE_xy (after SE(2) fit):       0.8699 m
+Improvement factor (raw/aligned): 2.86x
+
+How to read this:
+- If RMSE drops a lot after fit → mostly a **constant plane offset** (origin choice + heading bias).
+- If RMSE stays large → **path shape** differs (NDT/EKF dynamics, smear, wrong motion).
+- |theta| near 90/180 with big raw RMSE → check **base_link / lidar extrinsics / odom frame**.

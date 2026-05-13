@@ -1,0 +1,6 @@
+slam_bringup:
+  # B) Smoother cloud + gentler optimizer step
+  # Goal: reduce local zig-zag and path-length inflation.
+  lidar_voxel_leaf_size: 0.32
+  lidar_ndt_step_size: 0.05
+  lidar_ndt_max_iterations: 40

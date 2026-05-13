@@ -1,0 +1,181 @@
+ROS_Deployment/
+├── .cursor/
+├── .vscode/
+│   ├── browse.vc.db
+│   ├── c_cpp_properties.json
+│   └── settings.json
+├── Archive/
+│   ├── foxy/
+│   │   ├── params.yaml
+│   │   ├── robot_autostart.sh
+│   │   ├── robot_autostart_original.sh
+│   │   └── robot_sensors_with_microstrain_lifecycle.sh
+│   ├── microstrain_params.yml
+│   └── params.yaml
+├── docs/
+│   ├── dissertation_assets/
+│   │   ├── runtime/
+│   │   └── static/
+│   ├── dissertation_figure_automation.md
+│   ├── imu_mount_note.md
+│   ├── livox_mount_note.md
+│   ├── SLAM_CONFIGURATION.md
+│   └── tuning.MD
+├── documentation/
+│   └── issues-and-solutions-summary.md
+├── readme/
+│   └── TUNING.md
+├── scripts/
+│   ├── dissertation/
+│   │   ├── build_report_assets.py
+│   │   ├── capture_runtime_assets.sh
+│   │   ├── export_static_assets.py
+│   │   └── run_all.sh
+│   ├── bag_play_no_recorded_tf.py
+│   ├── compare_imu_gyro_base.py
+│   ├── odom_trajectory_tools.py
+│   ├── record_live_odom_bench.sh
+│   ├── record_topic_txts_bag_compare.sh
+│   ├── slam_replay_diagnostics.sh
+│   └── slam_symptom_classifier.py
+├── slow_motion_test/
+│   ├── metadata.yaml
+│   └── slow_motion_test_0.db3.zstd
+├── src/
+│   ├── FAST_LIO_ROS2/
+│   │   ├── .github/
+│   │   ├── config/
+│   │   ├── doc/
+│   │   ├── include/
+│   │   ├── launch/
+│   │   ├── Log/
+│   │   ├── msg/
+│   │   ├── PCD/
+│   │   ├── rviz/
+│   │   ├── rviz_cfg/
+│   │   ├── src/
+│   │   ├── .gitignore
+│   │   ├── .gitmodules
+│   │   ├── CMakeLists.txt
+│   │   ├── LICENSE
+│   │   ├── package.xml
+│   │   └── README.md
+│   ├── keyframe_scan_map/
+│   │   ├── config/
+│   │   ├── keyframe_scan_map/
+│   │   ├── launch/
+│   │   ├── resource/
+│   │   ├── package.xml
+│   │   ├── README.md
+│   │   ├── setup.cfg
+│   │   └── setup.py
+│   ├── lidar_odometry/
+│   │   ├── launch/
+│   │   ├── lidar_odometry/
+│   │   ├── resource/
+│   │   ├── src/
+│   │   ├── CMakeLists.txt
+│   │   ├── package.xml
+│   │   └── README.md
+│   ├── lio_bringup/
+│   │   ├── config/
+│   │   ├── launch/
+│   │   ├── lio_bringup/
+│   │   ├── resource/
+│   │   ├── package.xml
+│   │   ├── setup.cfg
+│   │   └── setup.py
+│   ├── livox_ros_driver2/
+│   │   ├── 3rdparty/
+│   │   ├── cmake/
+│   │   ├── config/
+│   │   ├── launch_ROS1/
+│   │   ├── launch_ROS2/
+│   │   ├── msg/
+│   │   ├── src/
+│   │   ├── .gitignore
+│   │   ├── build.sh
+│   │   ├── CHANGELOG.md
+│   │   ├── CMakeLists.txt
+│   │   ├── LICENSE.txt
+│   │   ├── package.xml
+│   │   ├── package_ROS1.xml
+│   │   └── README.md
+│   ├── localisation_ekf/
+│   │   ├── config/
+│   │   ├── localisation_ekf/
+│   │   ├── resource/
+│   │   ├── src/
+│   │   ├── test/
+│   │   ├── package.xml
+│   │   ├── setup.cfg
+│   │   └── setup.py
+│   ├── ros_project_bringup/
+│   │   ├── config/
+│   │   ├── docs/
+│   │   ├── launch/
+│   │   ├── resource/
+│   │   ├── ros_project_bringup/
+│   │   ├── rviz/
+│   │   ├── scripts/
+│   │   ├── package.xml
+│   │   └── setup.py
+│   ├── fastlio.csv
+│   └── LiDAR-Instructions.md
+├── .gitignore
+├── align_ekf_slam6_overlay.png
+├── align_ekf_slam6_report.txt
+├── align_lidar_slam7_overlay.png
+├── align_lidar_slam7_report.txt
+├── autorun.md
+├── CHANGES-CONFIGS
+├── deployment.md
+├── fastlio.csv
+├── fastlio_odom_base.csv
+├── fastlio_odom_base.record_meta.json
+├── frames_2026-04-09_01.08.27.gv
+├── frames_2026-04-09_01.08.27.pdf
+├── frames_2026-04-10_02.27.26.gv
+├── frames_2026-04-10_02.27.26.pdf
+├── frames_2026-04-19_01.07.01.gv
+├── frames_2026-04-19_01.07.01.pdf
+├── frames_2026-04-19_01.08.40.gv
+├── frames_2026-04-19_01.08.40.pdf
+├── frames_2026-04-19_02.41.42.gv
+├── frames_2026-04-19_02.41.42.pdf
+├── frames_2026-04-19_02.43.27.gv
+├── frames_2026-04-19_02.43.27.pdf
+├── frames_2026-04-19_02.44.35.gv
+├── frames_2026-04-19_02.44.35.pdf
+├── frames_2026-04-19_02.45.03.gv
+├── frames_2026-04-19_02.45.03.pdf
+├── frames_2026-04-19_02.45.52.gv
+├── frames_2026-04-19_02.45.52.pdf
+├── frames_2026-04-19_02.46.44.gv
+├── frames_2026-04-19_02.46.44.pdf
+├── frames_2026-04-19_02.49.43.gv
+├── frames_2026-04-19_02.49.43.pdf
+├── frames_2026-04-19_02.50.03.gv
+├── frames_2026-04-19_02.50.03.pdf
+├── frames_2026-05-05_05.21.32.gv
+├── frames_2026-05-05_05.21.32.pdf
+├── frames_2026-05-05_06.37.20.gv
+├── frames_2026-05-05_06.37.20.pdf
+├── Function
+├── lidar_type
+├── README.md
+├── run_compare_report.txt
+├── run_compare_xy_yaw.png
+├── slam.csv
+├── slam2.csv
+├── slam3.csv
+├── slam4.csv
+├── slam5.csv
+├── slam6.csv
+├── slam_lidar.csv
+├── slam_lidar2.csv
+├── slam_lidar3.csv
+├── slam_lidar4.csv
+├── slam_lidar5.csv
+├── slam_lidar6.csv
+└── slam_lidar7.csv

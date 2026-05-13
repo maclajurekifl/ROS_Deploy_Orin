@@ -1,0 +1,14 @@
+slam_bringup:
+  # Isolate FAST-LIO front-end during bag replay.
+  start_keyframe_map: false
+  start_pose_graph: false
+  keyframe_deskew_enable: false
+
+  # Remove timing offsets for clean baseline.
+  keyframe_deskew_imu_stamp_offset_sec: 0.0
+  ekf_imu_stamp_offset_sec: 0.0
+  ekf_lidar_stamp_offset_sec: 0.0
+
+  # Use dedicated FAST-LIO agile timing overlay from lio_bringup package.
+  # This switches LIO IMU to /livox/imu and disables online extrinsic estimation.
+  lio_overlay_params_file: config/fastlio_mid360_agile_timing_overlay.yaml

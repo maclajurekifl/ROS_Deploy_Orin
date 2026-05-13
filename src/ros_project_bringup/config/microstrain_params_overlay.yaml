@@ -1,0 +1,26 @@
+# Merged on top of the vendor microstrain `params.yml` when `launch_slam` starts the
+# Microstrain node (`microstrain_imu_origin: local` + `launch_sensors:=true`).
+#
+# Source of truth for geometry: `slam_bringup.yaml` `imu_mount_*` + `docs/imu_mount_note.md`.
+# Port/baud/rates are still overridden again from `slam_bringup.yaml` after this merge.
+# EKF `microstrain_imu_topic`: `/imu/data` (Foxy robot driver) or `/imu/data_raw` (Humble raw-only). Overlay
+# matches Humble local driver rates; robot Foxy ignores imu_data_raw_rate — set topic in slam_bringup.yaml.
+#
+# `mount_to_frame_id_transform`: [x, y, z, qx, qy, qz, qw] = base_link → imu_link
+# Translation (0, 0, 0.065) m; yaw −90° about +Z (GX5 +X toward connector vs robot +X forward).
+
+port: "/dev/ttyACM0"
+baudrate: 115200
+
+frame_id: "imu_link"
+imu_frame_id: "imu_link"
+mount_frame_id: "base_link"
+
+# Match launch_slam: static TF from `imu_mount_*` defines mount; avoid duplicate TF from driver.
+publish_mount_to_frame_id_transform: false
+
+# Kept accurate for standalone `microstrain_inertial_driver` runs or firmware-related use.
+mount_to_frame_id_transform: [0.0, 0.0, 0.065, 0.0, 0.0, -0.7071067811865475, 0.7071067811865476]
+
+imu_data_raw_rate: 200
+imu_data_rate: 0

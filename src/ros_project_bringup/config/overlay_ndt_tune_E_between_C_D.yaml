@@ -1,0 +1,9 @@
+# Same NDT + EMA knobs as the current default in slam_bringup.yaml (explicit pin for A/B diffs).
+slam_bringup:
+  lidar_voxel_leaf_size: 0.46
+  lidar_max_fitness_score: 7.0
+  lidar_ndt_step_size: 0.035
+  lidar_ndt_max_iterations: 30
+  lidar_ndt_resolution: 0.95
+  lidar_ndt_transformation_epsilon: 0.01
+  lidar_odom_smooth_alpha_pose: 0.10

@@ -1,0 +1,4 @@
+slam_bringup:
+  # Remove deskew sign/identity hacks for geometry sanity checks.
+  keyframe_deskew_imu_sign: 1.0
+  keyframe_deskew_livox_imu_sensor_as_cloud_identity: false

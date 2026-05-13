@@ -1,0 +1,12 @@
+# Merge with slam_bringup via:
+#   bringup_config:=$(ros2 pkg prefix ros_project_bringup)/share/ros_project_bringup/config/overlay_fastlio_replay_tf.yaml
+# Use with: launch_slam.launch.py use_sim_time:=true launch_sensors:=false
+# Goal: map→odom static, base_link↔livox/imu static bridges, EKF publishing odom→base_link,
+# without NDT/keyframe/Rviz competing with FAST-LIO on the same LiDAR topics.
+
+slam_bringup:
+  use_lidar_fusion: false
+  use_lio: false
+  start_keyframe_map: false
+  start_pose_graph: false
+  start_rviz: false

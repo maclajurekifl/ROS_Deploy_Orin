@@ -1,0 +1,158 @@
+# CHANGES-CONFIGS — config refactor (YAML bringup + Livox launch args)
+
+**Purpose:** Record what was added, removed, and where, so you can revert or diff manually.  
+**Note:** This workspace had no `git` history at the time of the change; line numbers below refer to the **tree after** the refactor. If you initialize git now, future edits can use `git diff` against this commit.
+
+---
+
+## Summary
+
+| Kind | Count (approx.) |
+|------|-----------------|
+| **New file** | `src/ros_project_bringup/config/slam_bringup.yaml` (202 lines) |
+| **Removed from** `launch_slam.launch.py` | The entire inline Python dict **`USER_LAUNCH_CONFIG`** (~165 lines), previously ~lines 80–244 in the pre-refactor file |
+| **Added to** `launch_slam.launch.py` | YAML load/merge helpers + Livox `launch_arguments` wiring (~95 lines of new code + docstring edits) |
+| **Replaced** | `livox_ros_driver2/launch_ROS2/rviz_MID360_launch.py` (was ~64 lines with module-level hardcoded `xfer_format`, `frame_id`, etc.) → launch arguments + `ParameterValue` (~79 lines) |
+| **Small edits** | Comments/strings in a few other files (see list) |
+
+**To restore the old “all in one Python dict” approach:** copy the key/value content from `config/slam_bringup.yaml` (under `slam_bringup:`) back into a **`USER_LAUNCH_CONFIG = { ... }`** at the top of `launch_slam.launch.py`, then change `launch_setup` to use `U = USER_LAUNCH_CONFIG` instead of `_load_slam_bringup_config(...)`, and remove the helper functions and `DeclareLaunchArgument('bringup_config', ...)`. Revert `rviz_MID360_launch.py` to the version that used only hardcoded module variables and `user_config_path` = `PathJoinSubstitution` without `DeclareLaunchArgument` for each param.
+
+---
+
+## 1. `src/ros_project_bringup/config/slam_bringup.yaml`
+
+| | |
+|--|--|
+| **Action** | **ADD** (entire file new) |
+| **Current lines** | 1–202 |
+| **Content** | All former `USER_LAUNCH_CONFIG` keys under `slam_bringup:` (EKF/NDT/keyframe/pose/Microstrain/Livox paths, `livox_*` driver fields, etc.) + header comments |
+
+**Reduction elsewhere:** The same logical data was **removed** from `launch_slam.launch.py` as a Python dict.
+
+---
+
+## 2. `src/ros_project_bringup/launch/launch_slam.launch.py`
+
+| | |
+|--|--|
+| **Action** | **MAJOR EDIT** (current file 599 lines) |
+
+**REMOVED (approximate pre-refactor location):**
+
+- **~80–244** (old line range): entire **`USER_LAUNCH_CONFIG = { ... }`** dict (all bringup key/value pairs).
+
+**ADDED (current line ranges):**
+
+- **10–32** — Module docstring: text now refers to `config/slam_bringup.yaml`, `bringup_config`, `ROS_PROJECT_SLAM_CONFIG` (replaces references to `USER_LAUNCH_CONFIG` / dict in several sentences).
+- **46–59** — Table rows updated (all bringup, paths from YAML).
+- **79–81** — Comment block: “Config: `config/slam_bringup.yaml` …”
+- **84–102** — **`_resolve_slam_bringup_overlay_path(context)`** (new function).
+- **105–133** — **`_load_slam_bringup_config(overlay_path)`** (new function: merge default + overlay).
+- **136–173** — **`_livox_launch_arg_pairs(user)`** (new function).
+- **176–178** — **`_share_file`** (unchanged in behavior; may have same line number as before).
+- **181–184** — Start of **`launch_setup`**: **`U = _load_slam_bringup_config(_resolve_slam_bringup_overlay_path(context))`** instead of **`U = USER_LAUNCH_CONFIG`**.
+- **311–318** — **`IncludeLaunchDescription`** for Livox: **added** **`launch_arguments=_livox_launch_arg_pairs(U)`** (previously no `launch_arguments=`) lines **311–318** in current file.
+- **580–597** — **`generate_launch_description`**: **added** **`DeclareLaunchArgument('bringup_config', ...)`** (lines 590–597). **`launch_sensors` description** text updated (lines 585–588).
+
+**Unchanged in spirit:** Rest of `launch_setup` (TF nodes, EKF, NDT, LIO, keyframe, pose graph, RViz) still reads **`U[...]`**; only the source of **`U`** changed.
+
+---
+
+## 3. `src/ros_project_bringup/setup.py`
+
+| | |
+|--|--|
+| **Action** | **ADD** one `data_files` line |
+| **Line** | **19** (between docs and rviz) |
+
+**ADDED line (substance):**
+
+```text
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+```
+
+**Effect:** Installs `share/ros_project_bringup/config/slam_bringup.yaml` at build time.
+
+---
+
+## 4. `src/livox_ros_driver2/launch_ROS2/rviz_MID360_launch.py`
+
+| | |
+|--|--|
+| **Action** | **REPLACE** entire file (current 79 lines) |
+
+**REMOVED (old pattern):**
+
+- Module-level hardcoded: **`xfer_format`**, **`multi_topic`**, **`data_src`**, **`publish_freq`**, **`output_type`**, **`frame_id`**, **`cmdline_bd_code`** (Python variables).
+- **Single** `user_config_path = PathJoinSubstitution([...])` without launch arguments.
+- `livox_ros2_params` list of plain dicts with numeric/string literals.
+- `DeclareLaunchArgument` only for **`lvx_file_path`**.
+
+**ADDED:**
+
+- **Lines 1–7** — New module docstring.
+- **Lines 17–39** — `DeclareLaunchArgument` for **`user_config`** (default still package **`MID360_config.json`** via `PathJoinSubstitution`), plus **`_t(...)`** for **`xfer_format`**, **`multi_topic`**, **`data_src`**, **`publish_freq`**, **`output_type`**, **`frame_id`**, **`cmdline_bd_code`**, **`lvx_file_path`**.
+- **Lines 40–75** — **`Node`** `parameters` now use **`ParameterValue(LaunchConfiguration(...), value_type=...)`** for each.
+
+---
+
+## 5. `src/localisation_ekf/config/ekf_python.yaml`
+
+| | |
+|--|--|
+| **Action** | **1-line comment edit** |
+| **Line (approx.)** | **58** |
+
+**REPLACED comment text:**  
+`USER_LAUNCH_CONFIG` → `slam_bringup.yaml` in the `imu_source` / launch note.
+
+**Reduction:** None (same parameters).
+
+---
+
+## 6. `src/localisation_ekf/localisation_ekf/ekf_node.py`
+
+| | |
+|--|--|
+| **Action** | **1 string literal edit** in a warning/log message |
+| **Line (approx.)** | **481** |
+
+**REPLACED:**  
+`USER_LAUNCH_CONFIG` → `slam_bringup` in the guidance string for `ekf_lidar_gate_nis` / `lidar_pose_var`.
+
+---
+
+## 7. `src/ros_project_bringup/docs/STACK_OVERVIEW.md`
+
+| | |
+|--|--|
+| **Action** | **Multiple paragraph edits** (references `USER_LAUNCH_CONFIG` → `slam_bringup.yaml` / bringup) |
+
+Touched **intro** (was “dict at top of launch file”), **ekf/imu_source**, **Livox extrinsics**, **“Bringup knobs”** line — exact line numbers depend on your copy; search for `slam_bringup` / `USER_LAUNCH` to find them.
+
+---
+
+## 8. Top-level and docs (reference-only, no code behavior)
+
+| File | What changed |
+|------|----------------|
+| **`README.md`** | §1.2 “Where to tune”, §1.3 Microstrain example, **new §7.0** (full-stack bringup table), **§7.2** NDT row, **§8.1** merge wording — search **`slam_bringup`**. |
+| **`deployment.md`** | All **`USER_LAUNCH_CONFIG`** → bringup / **`slam_bringup.yaml`** (several lines). |
+| **`readme/TUNING.md`** | Two references: extrinsics + global bringup. |
+| **`documentation/issues-and-solutions-summary.md`** | bringup / **`slam_bringup.yaml`** in a few table rows and mitigations. |
+
+---
+
+## Revert checklist (no git)
+
+1. Restore **`src/livox_ros_driver2/launch_ROS2/rviz_MID360_launch.py`** to the pre-refactor version (hardcoded module params; no per-arg `DeclareLaunchArgument` except `lvx_file_path` if that was the old behavior).
+2. In **`launch_slam.launch.py`**: remove **`_resolve_slam_bringup_overlay_path`**, **`_load_slam_bringup_config`**, **`_livox_launch_arg_pairs`**; re-insert **`USER_LAUNCH_CONFIG`**: translate **`slam_bringup.yaml`** (YAML) → Python dict literals; set **`U = USER_LAUNCH_CONFIG`**; remove **`bringup_config`** `DeclareLaunchArgument`; remove Livox **`launch_arguments=`** on **`IncludeLaunchDescription`**.
+3. Remove **`src/ros_project_bringup/config/slam_bringup.yaml`**; remove the **`config/*.yaml`** line from **`setup.py`** if you do not want the directory installed.
+4. Revert the one-line edits in **`ekf_python.yaml`**, **`ekf_node.py`**, and the markdown files if you want old wording.
+5. Run `colcon build --packages-select ros_project_bringup livox_ros_driver2` (or full workspace) after revert.
+
+If you add **`git init`** and commit the current state, reverts can be: **`git checkout -- <file>`** or **`git revert <commit>`**.
+
+---
+
+*Generated to match the “YAML bringup + documented Livox launch” refactor. Line numbers: ROS_Deployment tree as of the change.*

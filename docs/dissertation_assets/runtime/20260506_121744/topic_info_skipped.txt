@@ -1,0 +1,1 @@
+FAST_MODE=1 -> skipping topic info sweep

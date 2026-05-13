@@ -1,0 +1,4 @@
+slam_bringup:
+  # Test F: isolate FAST-LIO odometry from mapping back-end.
+  start_keyframe_map: false
+  start_pose_graph: false

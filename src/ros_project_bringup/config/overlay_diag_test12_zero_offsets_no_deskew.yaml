@@ -1,0 +1,8 @@
+slam_bringup:
+  # Test 1: remove timing offsets
+  keyframe_deskew_imu_stamp_offset_sec: 0.0
+  ekf_imu_stamp_offset_sec: 0.0
+  ekf_lidar_stamp_offset_sec: 0.0
+
+  # Test 2: disable external deskew (FAST-LIO already compensates)
+  keyframe_deskew_enable: false

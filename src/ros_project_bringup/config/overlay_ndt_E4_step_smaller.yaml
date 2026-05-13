@@ -1,0 +1,11 @@
+# NDT experiment E4 — bag replay / laptop: one knob vs current slam_bringup.yaml.
+# Baseline lidar_ndt_step_size 0.035 → 0.028 (smaller LM step; often stabilizes pose jumps).
+# Keep lidar_max_fitness_score at default 7.0 (E3 tighter fitness hurt on locked-window bench).
+#
+# Terminal 1:
+#   export OVR=$(ros2 pkg prefix ros_project_bringup)/share/ros_project_bringup/config/overlay_ndt_E4_step_smaller.yaml
+#   ros2 launch ros_project_bringup launch_slam.launch.py launch_sensors:=false bringup_config:=$OVR
+#
+# Terminal 5: --out-dir /tmp/bench_50s_lockwin_ndt_E4_step (same REC_* as prior benches).
+slam_bringup:
+  lidar_ndt_step_size: 0.028

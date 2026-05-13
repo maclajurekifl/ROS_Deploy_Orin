@@ -1,0 +1,6 @@
+# F1.5 — between F1 heavy and F3 light (yaw a bit snappier than F1; try vs same bag + tune_rollup)
+slam_bringup:
+  lidar_odom_smooth_enable: true
+  lidar_odom_smooth_mode: full
+  lidar_odom_smooth_alpha_pose: 0.12
+  lidar_odom_smooth_alpha_twist_linear: 0.14

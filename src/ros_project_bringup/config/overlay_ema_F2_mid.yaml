@@ -1,0 +1,6 @@
+# F2 — same as current defaults in slam_bringup.yaml (reference run)
+slam_bringup:
+  lidar_odom_smooth_enable: true
+  lidar_odom_smooth_mode: full
+  lidar_odom_smooth_alpha_pose: 0.18
+  lidar_odom_smooth_alpha_twist_linear: 0.22

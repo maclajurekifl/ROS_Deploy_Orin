@@ -1,0 +1,6 @@
+slam_bringup:
+  # D) Refine after C: stronger smoothing + smaller optimizer step
+  # Start from C winner and target lower local zig-zag / path-length inflation.
+  lidar_voxel_leaf_size: 0.40
+  lidar_ndt_step_size: 0.03
+  lidar_ndt_max_iterations: 30
