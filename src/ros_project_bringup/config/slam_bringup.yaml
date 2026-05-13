@@ -274,6 +274,10 @@ slam_bringup:
   ekf_path_topic: /ekf/path
   ekf_odom_frame: odom
   ekf_base_link_frame: base_link
+  # Added to **published** ``odom``→``base_link`` yaw only (``/ekf/odom``, ``/ekf/pose``, path, TF).
+  # Does not change fusion. Use **180.0** if RViz ``/ekf/pose`` +X points **aft** while path xy matches motion.
+  # Set **0.0** if the triad already matches the robot nose (avoid stacking with other yaw fixes).
+  ekf_publish_base_link_yaw_offset_deg: 180.0
   ekf_publish_tf: true
   # LIO: relay can publish odom->base_link TF (set true) so EKF does not — single authority.
   # Default false: relay TF is only ~LiDAR rate → sparse /tf vs EKF+cloud-stamp TF → tf2 interpolation

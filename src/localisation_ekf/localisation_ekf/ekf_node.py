@@ -128,6 +128,8 @@ class EKFNode(Node):
         self.declare_parameter("imu_auto_gyro_z_bias_tune_sec", 4.0)
         # Applied after bias subtraction (try -1.0 if yaw runs opposite to truth / TF sign error).
         self.declare_parameter("imu_gyro_z_scale", 1.0)
+        # Added to published yaw only (odom/pose/path/TF); does not change LiDAR fusion or internal state.
+        self.declare_parameter("publish_base_link_yaw_offset_deg", 0.0)
         # Optional: fuse planar scan delta (TwistStamped linear.x/y = dx,dy in odom; dz unused)
         # into vx, vy between full LiDAR pose updates (gyro-only translation mode).
         self.declare_parameter("lidar_delta_topic", "")
@@ -242,6 +244,9 @@ class EKFNode(Node):
             self.get_parameter("lidar_delta_nominal_dt_sec").value
         )
         self._lidar_delta_prev_stamp = None
+        self._publish_yaw_off_rad = math.radians(
+            float(self.get_parameter("publish_base_link_yaw_offset_deg").value)
+        )
 
         if self.lidar_use_roll_pitch:
             self.get_logger().warn(
@@ -395,6 +400,11 @@ class EKFNode(Node):
             + (
                 f"; IMU ωz scale {float(self.get_parameter('imu_gyro_z_scale').value):g}"
                 if abs(float(self.get_parameter("imu_gyro_z_scale").value) - 1.0) > 1e-9
+                else ""
+            )
+            + (
+                f"; publish yaw +{math.degrees(self._publish_yaw_off_rad):.1f}° (outputs only)"
+                if abs(self._publish_yaw_off_rad) > 1e-12
                 else ""
             )
         )
@@ -809,8 +819,13 @@ class EKFNode(Node):
         pos, rpy = self.ekf.get_pose()
         px, py, pz = pos[0], pos[1], pos[2]
         roll, pitch, yaw = rpy[0], rpy[1], rpy[2]
-        x = self.ekf.get_state()
-        vx, vy = float(x[EKFPlanarIMU.I_VX]), float(x[EKFPlanarIMU.I_VY])
+        d = self._publish_yaw_off_rad
+        yaw_pub = wrap_angle(float(yaw) + float(d))
+        st = self.ekf.get_state()
+        vx, vy = float(st[EKFPlanarIMU.I_VX]), float(st[EKFPlanarIMU.I_VY])
+        if abs(d) > 1e-12:
+            cn, sn = math.cos(-d), math.sin(-d)
+            vx, vy = cn * vx - sn * vy, sn * vx + cn * vy
         P = self.ekf.P
         v_roll = self.flat_orientation_variance
 
@@ -834,7 +849,9 @@ class EKFNode(Node):
         odom.pose.pose.position.y = float(py)
         odom.pose.pose.position.z = float(pz)
 
-        qx, qy, qz, qw = quaternion_from_euler(float(roll), float(pitch), float(yaw))
+        qx, qy, qz, qw = quaternion_from_euler(
+            float(roll), float(pitch), float(yaw_pub)
+        )
         odom.pose.pose.orientation = Quaternion(x=qx, y=qy, z=qz, w=qw)
 
         odom.twist.twist.linear.x = float(vx)

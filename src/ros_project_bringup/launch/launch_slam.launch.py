@@ -632,6 +632,9 @@ def launch_setup(context, *args, **kwargs):
             U.get('ekf_imu_auto_gyro_z_bias_tune_sec', 4.0) or 4.0
         ),
         'imu_gyro_z_scale': float(U.get('ekf_imu_gyro_z_scale', 1.0) or 1.0),
+        'publish_base_link_yaw_offset_deg': float(
+            U.get('ekf_publish_base_link_yaw_offset_deg', 0.0) or 0.0
+        ),
     }
     if U.get('ekf_predict_use_linear_accel') is not None:
         ekf_core_overrides['predict_use_linear_accel'] = bool(
