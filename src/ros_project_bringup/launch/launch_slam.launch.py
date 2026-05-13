@@ -819,11 +819,11 @@ def launch_setup(context, *args, **kwargs):
 
     if use_lio:
         lio_sim = 'true' if use_sim_time else 'false'
-        # Bag / laptop (no local USB Livox): merge fastlio_bag_replay_overlay so PointCloud2 without
-        # Livox ``tag``/``line`` uses lidar_type 0 (see fastlio_bag_replay_overlay.yaml). Robot:
-        # launch_sensors true -> empty -> robot overlay only (lidar_type 4 in fastlio_mid360_overlay).
+        # Bag replay only: merge fastlio_bag_replay_overlay (lidar_type 0) when ``use_sim_time`` is true.
+        # Do **not** merge on live ``launch_sensors:=false`` (Jetson + Livox on DDS) — that would override
+        # MID360 ``lidar_type: 4`` and break preprocessing (log shows ``p_pre->lidar_type 0``).
         _lio_bag_overlay = ''
-        if not launch_sensors:
+        if use_sim_time:
             _lio_bag_overlay = str(
                 U.get('lio_bag_overlay_params_file', 'config/fastlio_bag_replay_overlay.yaml') or ''
             ).strip()

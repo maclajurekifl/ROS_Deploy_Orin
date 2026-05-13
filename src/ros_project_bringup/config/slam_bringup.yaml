@@ -50,9 +50,11 @@ slam_bringup:
   # Rotation imu_link → GX5 `frame_id` (often `sensor`). Non-zero here + wrong imu_mount_yaw → wrong ωz in base_link → spin.
   microstrain_sensor_alias_yaw_deg: 0.0
 # When launch_sensors:=false, publish ``imu_mount_*`` and Livox extrinsic static TFs from this YAML if true
-# (bag replay / laptop with no robot /tf_static). **false** when the robot already publishes the same
-# mounts on ``/tf_static`` (typical: Livox + Microstrain started at boot) — avoids duplicate publishers.
-  publish_robot_static_tf_when_sensors_off: false
+# (bag replay / laptop without robot ``/tf_static``). **true** by default so ``base_link``→``imu_link`` and
+# ``base_link``→``livox_frame`` exist for EKF + deskew when this launch does not start the drivers.
+# Set **false** only after ``ros2 topic echo /tf_static --once`` confirms the robot already publishes the
+# same transforms (avoids duplicate ``static_transform_publisher`` warnings).
+  publish_robot_static_tf_when_sensors_off: true
 
   # Odometry front-end: FAST-LIO (default) vs PCL NDT (`use_lidar_fusion: true`, `use_lio: false`).
   # Launch still allows `use_lio:=true|false` / `use_lidar_fusion:=...` to override merged YAML.
@@ -174,9 +176,9 @@ slam_bringup:
   livox_imu_bridge_roll_deg: 0.0
   livox_imu_bridge_pitch_deg: 0.0
   livox_imu_bridge_yaw_deg: 0.0
-  # false when Livox driver (robot bringup) already publishes ``livox_frame``→``livox_imu_child_frame``;
-  # true for bag replay / no TF for that link.
-  publish_livox_imu_sensor_frame_tf: false
+  # Identity ``livox_frame``→``livox_imu`` when this launch does not start the Livox node (deskew / TF).
+  # Set false only if another node already publishes that link on ``/tf_static``.
+  publish_livox_imu_sensor_frame_tf: true
 
   lidar_cloud_topic: /livox/lidar
   # When lidar_odom_smooth_enable is true, NDT publishes raw here; smoothed poses go to lidar_odom_topic.
