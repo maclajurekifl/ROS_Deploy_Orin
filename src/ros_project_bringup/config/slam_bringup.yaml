@@ -113,17 +113,18 @@ slam_bringup:
 
   keyframe_deskew_imu_stamp_offset_sec: -0.01
   keyframe_deskew_cloud_stamp_offset_sec: 0.0
-  keyframe_deskew_max_imu_age_sec: 0.08
+  # Loosen if deskew falls back during motion (less scan smear in turns; try 0.10–0.15).
+  keyframe_deskew_max_imu_age_sec: 0.13
   keyframe_deskew_imu_sign: -1.0
   keyframe_deskew_enable: true
   # true: deskew with same IMU as EKF (Microstrain) + gyro rotated into livox_frame; matches odom/NDT.
   # false: /livox/imu only — often smears the keyframe map when EKF uses Microstrain.
   keyframe_deskew_imu_follow_ekf: true
 
-  # Slightly denser keyframes during rotation-heavy motion (more overlap for map stability).
-  keyframe_min_dist_m: 0.18
-  keyframe_min_yaw_deg: 4.0
-  keyframe_min_time_sec: 0.6
+  # During **turns**: more / tighter keyframes + stable deskew reduce curved walls. Straight runs stay good.
+  keyframe_min_dist_m: 0.15
+  keyframe_min_yaw_deg: 3.0
+  keyframe_min_time_sec: 0.55
   # Final merge voxel for ``/keyframe_map`` (centroid per cell). Smaller → sharper walls, more points.
   keyframe_voxel_leaf_m: 0.06
   keyframe_max_map_points: 1200000
@@ -352,17 +353,19 @@ slam_bringup:
   keyframe_tf_lookup_timeout_sec: 0.25
   keyframe_tf_buffer_cache_sec: 180.0
   keyframe_deskew_imu_topic: /livox/imu
-  keyframe_deskew_model: rodrigues
-  keyframe_deskew_imu_buffer_max_samples: 512
+  # ``yaw_only``: ωz-only deskew — often cleaner on **flat** runs when rodrigues couples noisy ωx/ωy after IMU→Livox rotation.
+  # Use **rodrigues** if the robot pitches/rolls noticeably in turns.
+  keyframe_deskew_model: yaw_only
+  keyframe_deskew_imu_buffer_max_samples: 768
   keyframe_deskew_imu_interpolate: true
   keyframe_deskew_mean_gyro_fallback: true
   keyframe_deskew_imu_rotate_gyro_to_frame: livox_frame
-  keyframe_deskew_imu_rotation_tf_timeout_sec: 0.08
+  keyframe_deskew_imu_rotation_tf_timeout_sec: 0.12
   # Livox /livox/imu often uses frame_id ``sensor``; that must not use Microstrain's ``sensor`` TF.
   keyframe_deskew_livox_imu_sensor_as_cloud_identity: true
   keyframe_rotation_adaptive_keyframes: true
-  keyframe_rotation_gyro_thresh_rad_s: 0.45
-  keyframe_rotation_keyframe_scale: 0.7
+  keyframe_rotation_gyro_thresh_rad_s: 0.28
+  keyframe_rotation_keyframe_scale: 0.5
   # Safety gate (disabled by default): drop clouds with implausibly large jumps vs last keyframe.
   keyframe_reject_unstable_frame_enable: false
   keyframe_reject_unstable_frame_max_translation_m: 1.0
