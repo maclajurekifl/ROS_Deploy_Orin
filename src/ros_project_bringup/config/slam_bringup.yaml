@@ -277,8 +277,8 @@ slam_bringup:
   ekf_path_topic: /ekf/path
   ekf_odom_frame: odom
   ekf_base_link_frame: base_link
-  # Publish-only yaw added to ``/ekf/odom``, ``/ekf/pose``, path, TF — **does not change fusion**.
-  # Use **180** when motion/path are correct but RViz ``/ekf/pose`` +X points **aft** (keep relay as-is).
+  # Publish-only yaw on ``/ekf/odom``/pose/TF (not fusion). **Twist** is world→base_link at this heading.
+  # Use **180** if triad +X is aft; set **0** if motion/axis are both wrong (check twist fix in ekf_node first).
   ekf_publish_base_link_yaw_offset_deg: 180.0
   ekf_publish_tf: true
   # LIO: relay can publish odom->base_link TF (set true) so EKF does not — single authority.
@@ -365,8 +365,8 @@ slam_bringup:
   keyframe_auto_level_max_tilt_deg: 35.0
 
   pose_graph_map_odom_tf_period_sec: 0.1
-  # **1.0** = map→odom snaps each pose-graph solve (can look skewy when graph jumps). **~0.22–0.35** eases TF.
-  pose_graph_map_odom_tf_smooth_alpha: 0.28
+  # **1.0** = map→odom matches each graph solve. Lower α can ease jumps but may add visible lag/skew in map.
+  pose_graph_map_odom_tf_smooth_alpha: 1.0
   # Reject ``/ekf/odom`` header stamps this far behind wall clock when stamping map→odom (stale DDS / replay).
   pose_graph_odom_stamp_max_past_sec: 25.0
   pose_graph_odom_stamp_max_future_sec: 2.0

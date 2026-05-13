@@ -880,11 +880,21 @@ class EKFNode(Node):
         d = self._publish_yaw_off_rad
         yaw_pub = wrap_angle(float(yaw) + float(d))
         st = self.ekf.get_state()
-        vx, vy = float(st[EKFPlanarIMU.I_VX]), float(st[EKFPlanarIMU.I_VY])
-        if abs(d) > 1e-12:
-            cn, sn = math.cos(-d), math.sin(-d)
-            vx, vy = cn * vx - sn * vy, sn * vx + cn * vy
+        vx_w = float(st[EKFPlanarIMU.I_VX])
+        vy_w = float(st[EKFPlanarIMU.I_VY])
+        # Planar EKF holds vx,vy in **world** frame; odometry twist must be in ``child_frame_id``
+        # (base_link). Rotate into the **published** heading ``yaw_pub`` (includes publish-only offset).
+        cb = math.cos(float(yaw_pub))
+        sb = math.sin(float(yaw_pub))
+        vx_b = cb * vx_w + sb * vy_w
+        vy_b = -sb * vx_w + cb * vy_w
         P = self.ekf.P
+        pw = np.array(
+            [[float(P[4, 4]), float(P[4, 5])], [float(P[5, 4]), float(P[5, 5])]],
+            dtype=float,
+        )
+        R2 = np.array([[cb, sb], [-sb, cb]], dtype=float)
+        pb = R2 @ pw @ R2.T
         v_roll = self.flat_orientation_variance
 
         if self._publish_use_ros_time_in_headers:
@@ -912,8 +922,8 @@ class EKFNode(Node):
         )
         odom.pose.pose.orientation = Quaternion(x=qx, y=qy, z=qz, w=qw)
 
-        odom.twist.twist.linear.x = float(vx)
-        odom.twist.twist.linear.y = float(vy)
+        odom.twist.twist.linear.x = float(vx_b)
+        odom.twist.twist.linear.y = float(vy_b)
 
         odom.pose.covariance[0] = float(P[0, 0])
         odom.pose.covariance[7] = float(P[1, 1])
@@ -922,8 +932,8 @@ class EKFNode(Node):
         odom.pose.covariance[28] = float(v_roll)
         odom.pose.covariance[35] = float(P[3, 3])
 
-        odom.twist.covariance[0] = float(P[4, 4])
-        odom.twist.covariance[7] = float(P[5, 5])
+        odom.twist.covariance[0] = float(pb[0, 0])
+        odom.twist.covariance[7] = float(pb[1, 1])
 
         self.pub_odom.publish(odom)
 
