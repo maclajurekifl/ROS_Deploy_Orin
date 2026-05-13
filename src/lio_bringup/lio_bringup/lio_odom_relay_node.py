@@ -6,6 +6,10 @@ with the same pose/twist/covariance so localisation_ekf + frame checks stay unch
 Assumes odom is aligned with FAST-LIO world (camera_init) and base_link with body
 for this workspace (see lio_bringup README).
 
+Optional ``body_to_base_yaw_deg`` (default 0): planar rotation from FAST-LIO **body** to robot
+``base_link`` (REP-103 +X forward). When RViz ``/ekf/path`` +X points **aft** while the robot
+drives **forward**, try **180.0** — Livox mount yaw is separate (``livox_extrinsic_yaw_deg``).
+
 Optional ``publish_tf`` (default false): broadcast ``odom`` -> ``base_link`` from each relayed
 message so one node owns that TF (use with ``ekf_node`` ``publish_tf``: false in LIO mode).
 
@@ -15,6 +19,8 @@ LiDAR time (last odometry pose held forward until the next /Odometry).
 """
 from __future__ import annotations
 
+import math
+from copy import deepcopy
 from typing import Optional
 
 import rclpy
@@ -24,6 +30,41 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sensor_msgs.msg import PointCloud2
 from tf2_ros import TransformBroadcaster
+from tf_transformations import euler_from_quaternion, quaternion_from_euler
+
+
+def _wrap_angle(a: float) -> float:
+    return math.atan2(math.sin(a), math.cos(a))
+
+
+def _rotate_twist_body_to_base(tw, yaw_rad: float) -> None:
+    """Twist is expressed in child frame; rotate linear + angular from body to base (planar Z)."""
+    if abs(yaw_rad) < 1e-9:
+        return
+    c, s = math.cos(yaw_rad), math.sin(yaw_rad)
+    lx, ly, lz = tw.linear.x, tw.linear.y, tw.linear.z
+    tw.linear.x = c * lx - s * ly
+    tw.linear.y = s * lx + c * ly
+    tw.linear.z = lz
+    ax, ay, az = tw.angular.x, tw.angular.y, tw.angular.z
+    tw.angular.x = c * ax - s * ay
+    tw.angular.y = s * ax + c * ay
+    tw.angular.z = az
+
+
+def _apply_body_to_base_yaw(msg: Odometry, yaw_rad: float) -> Odometry:
+    """Return a copy with pose + twist adjusted by fixed yaw about Z (body -> base_link)."""
+    out = deepcopy(msg)
+    q = out.pose.pose.orientation
+    roll, pitch, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
+    yaw2 = _wrap_angle(float(yaw) + float(yaw_rad))
+    qx, qy, qz, qw = quaternion_from_euler(float(roll), float(pitch), float(yaw2))
+    out.pose.pose.orientation.x = float(qx)
+    out.pose.pose.orientation.y = float(qy)
+    out.pose.pose.orientation.z = float(qz)
+    out.pose.pose.orientation.w = float(qw)
+    _rotate_twist_body_to_base(out.twist.twist, yaw_rad)
+    return out
 
 
 class LioOdomRelayNode(Node):
@@ -35,6 +76,7 @@ class LioOdomRelayNode(Node):
         self.declare_parameter('out_child_frame_id', 'base_link')
         self.declare_parameter('publish_tf', False)
         self.declare_parameter('sync_tf_cloud_topic', '')
+        self.declare_parameter('body_to_base_yaw_deg', 0.0)
 
         in_t = self.get_parameter('in_topic').value
         out_t = self.get_parameter('out_topic').value
@@ -43,6 +85,7 @@ class LioOdomRelayNode(Node):
         self._publish_tf = bool(self.get_parameter('publish_tf').value)
         sync_topic = str(self.get_parameter('sync_tf_cloud_topic').value).strip()
         self._sync_cloud = bool(self._publish_tf and sync_topic)
+        self._yaw_fix = math.radians(float(self.get_parameter('body_to_base_yaw_deg').value))
         self._last_pose: Optional[Odometry] = None
         self._tf_broadcaster = TransformBroadcaster(self) if self._publish_tf else None
 
@@ -62,10 +105,14 @@ class LioOdomRelayNode(Node):
         self._pub = self.create_publisher(Odometry, out_t, qos)
         if self._sync_cloud:
             self.create_subscription(PointCloud2, sync_topic, self._on_cloud, cloud_qos)
+        extra = ''
+        if abs(self._yaw_fix) > 1e-9:
+            extra = f'; body→base yaw fix {math.degrees(self._yaw_fix):.1f}deg'
         self.get_logger().info(
             f'lio_odom_relay: {in_t} (camera_init/body) -> {out_t} ({self._frame} -> {self._child})'
             + (f'; TF {self._frame}->{self._child}' if self._publish_tf else '')
             + (f'; TF sync cloud={sync_topic!r}' if self._sync_cloud else '')
+            + extra
         )
 
     def _send_tf(self, stamp, pose: Odometry) -> None:
@@ -82,17 +129,18 @@ class LioOdomRelayNode(Node):
         self._tf_broadcaster.sendTransform(t)
 
     def _cb(self, msg: Odometry) -> None:
-        self._last_pose = msg
-        out = Odometry()
-        out.header.stamp = msg.header.stamp
-        out.header.frame_id = self._frame
-        out.child_frame_id = self._child
-        out.pose = msg.pose
-        out.twist = msg.twist
-        self._pub.publish(out)
+        out = _apply_body_to_base_yaw(msg, self._yaw_fix) if abs(self._yaw_fix) > 1e-9 else msg
+        self._last_pose = out
+        out2 = Odometry()
+        out2.header.stamp = out.header.stamp
+        out2.header.frame_id = self._frame
+        out2.child_frame_id = self._child
+        out2.pose = out.pose
+        out2.twist = out.twist
+        self._pub.publish(out2)
         if self._tf_broadcaster is not None:
             if not self._sync_cloud:
-                self._send_tf(out.header.stamp, out)
+                self._send_tf(out2.header.stamp, out2)
 
     def _on_cloud(self, msg: PointCloud2) -> None:
         if self._tf_broadcaster is None or not self._sync_cloud or self._last_pose is None:

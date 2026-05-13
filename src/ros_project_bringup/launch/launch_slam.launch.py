@@ -299,6 +299,7 @@ def launch_setup(context, *args, **kwargs):
         lio_relay_sync_tf_cloud_topic = str(
             U.get('keyframe_cloud_topic', '/livox/lidar') or ''
         ).strip()
+    lio_relay_body_to_base_yaw_deg = float(U.get('lio_relay_body_to_base_yaw_deg', 0.0) or 0.0)
     if use_lio and lio_relay_publish_tf:
         ekf_publish_tf_effective = bool(U.get('ekf_publish_tf_when_lio', False))
     else:
@@ -861,6 +862,10 @@ def launch_setup(context, *args, **kwargs):
                     (
                         'lio_relay_sync_tf_cloud_topic',
                         TextSubstitution(text=lio_relay_sync_tf_cloud_topic),
+                    ),
+                    (
+                        'lio_relay_body_to_base_yaw_deg',
+                        TextSubstitution(text=str(lio_relay_body_to_base_yaw_deg)),
                     ),
                 ],
             )

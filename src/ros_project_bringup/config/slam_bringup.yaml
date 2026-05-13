@@ -281,6 +281,10 @@ slam_bringup:
   # When relay owns TF: also publish odom->base_link at each LiDAR cloud stamp (topic below).
   lio_relay_auto_sync_tf_cloud: true
   lio_relay_sync_tf_cloud_topic: ""
+  # FAST-LIO ``body`` vs robot ``base_link`` (REP-103 +X forward). Use **180.0** when ``/ekf/path``
+  # ``+X`` points **aft** while driving **forward** (motion toward **negative** ``x``). This is **not**
+  # ``livox_extrinsic_yaw_deg`` (LiDAR cloud in ``base_link``). Set **0.0** if ``/ekf/path`` +X already matches nose.
+  lio_relay_body_to_base_yaw_deg: 0.0
   # ~40 Hz effective /imu/data on typical GX5 @115200; use_stamp_dt still refines per step.
   ekf_nominal_dt: 0.025
   ekf_use_stamp_dt: true
