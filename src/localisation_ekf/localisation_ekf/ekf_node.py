@@ -685,18 +685,28 @@ class EKFNode(Node):
     def _effective_lidar_meas_vars(
         self, twist_linear_xy: Optional[Tuple[float, float]]
     ) -> Tuple[float, float]:
-        """Scale pose/yaw measurement variance when reported planar speed is low (LIO jitter at rest)."""
+        """Scale pose/yaw measurement variance when planar speed is low (LIO jitter at rest).
+
+        Uses ``max(|v_lidar_twist|, |v_ekf|)`` for gating: FAST-LIO often fills twist.linear with
+        ~0 even while moving; trusting only twist would inflate variance during motion and break
+        xy fusion while yaw stays IMU-only (``lidar_fuse_xy_only``), which looks like a huge
+        heading/path mismatch.
+        """
         base_p = float(self.lidar_pose_var)
         base_y = float(self.lidar_yaw_var)
         if self._lidar_slow_speed_m <= 1e-9:
             return base_p, base_y
+        st = self.ekf.get_state()
+        vx_e = float(st[EKFPlanarIMU.I_VX])
+        vy_e = float(st[EKFPlanarIMU.I_VY])
+        sp_ekf = math.hypot(vx_e, vy_e)
         if twist_linear_xy is None:
-            st = self.ekf.get_state()
-            vx = float(st[EKFPlanarIMU.I_VX])
-            vy = float(st[EKFPlanarIMU.I_VY])
+            sp = sp_ekf
         else:
-            vx, vy = float(twist_linear_xy[0]), float(twist_linear_xy[1])
-        sp = math.hypot(vx, vy)
+            vx_t = float(twist_linear_xy[0])
+            vy_t = float(twist_linear_xy[1])
+            sp_meas = math.hypot(vx_t, vy_t)
+            sp = max(sp_meas, sp_ekf)
         if sp >= self._lidar_slow_speed_m:
             return base_p, base_y
         return base_p * self._lidar_slow_var_scale, base_y * self._lidar_slow_var_scale

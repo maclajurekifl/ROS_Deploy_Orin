@@ -96,9 +96,8 @@ slam_bringup:
   ekf_imu_auto_gyro_z_bias_tune_sec: 5.0
   # 1.0 normal; -1.0 if integrated yaw runs opposite (TF/sign experiment).
   ekf_imu_gyro_z_scale: 1.0
-  # Planar speed from ``/lidar/odom`` twist (m/s): below this, multiply pose (+ yaw if fused) variance by scale.
-  # Reduces EKF slam-back jitter when slowing/stopped (LIO scan noise). **0** disables.
-  ekf_lidar_fuse_slow_linear_speed_m_s: 0.12
+  # Below this planar speed (m/s), inflate LiDAR pose variance — gate uses ``max(|twist|,|EKF v|)``. **0** = off.
+  ekf_lidar_fuse_slow_linear_speed_m_s: 0.0
   ekf_lidar_pose_var_below_slow_speed_scale: 25.0
 
   # NDT defaults tuned vs FAST-LIO (locked-window bench 2026-05: voxel 0.46 vs 0.38 lowered align RMSE).
@@ -278,10 +277,9 @@ slam_bringup:
   ekf_path_topic: /ekf/path
   ekf_odom_frame: odom
   ekf_base_link_frame: base_link
-  # Added to **published** ``odom``→``base_link`` yaw only (``/ekf/odom``, ``/ekf/pose``, path, TF).
-  # Does not change fusion. Use **180.0** if RViz ``/ekf/pose`` +X points **aft** while path xy matches motion.
-  # Set **0.0** if the triad already matches the robot nose (avoid stacking with other yaw fixes).
-  ekf_publish_base_link_yaw_offset_deg: 180.0
+  # Added to **published** ``odom``→``base_link`` yaw only. Prefer **0** when ``lio_relay_body_to_base_yaw_deg``
+  # already fixes FAST-LIO body→base; use **±180** only if RViz ``/ekf/pose`` +X still mismatches the nose.
+  ekf_publish_base_link_yaw_offset_deg: 0.0
   ekf_publish_tf: true
   # LIO: relay can publish odom->base_link TF (set true) so EKF does not — single authority.
   # Default false: relay TF is only ~LiDAR rate → sparse /tf vs EKF+cloud-stamp TF → tf2 interpolation
@@ -367,8 +365,8 @@ slam_bringup:
   keyframe_auto_level_max_tilt_deg: 35.0
 
   pose_graph_map_odom_tf_period_sec: 0.1
-  # Low-pass on pose-graph ``map``→``odom`` SE(2): **1.0** = snap each optimize (legacy); **0.15–0.35** reduces skew/jumps.
-  pose_graph_map_odom_tf_smooth_alpha: 0.22
+  # **1.0** = snap ``map``→``odom`` to each graph solve; lower values smooth TF (may lag correction).
+  pose_graph_map_odom_tf_smooth_alpha: 1.0
   # Reject ``/ekf/odom`` header stamps this far behind wall clock when stamping map→odom (stale DDS / replay).
   pose_graph_odom_stamp_max_past_sec: 25.0
   pose_graph_odom_stamp_max_future_sec: 2.0
