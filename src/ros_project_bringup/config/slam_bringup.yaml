@@ -112,8 +112,8 @@ slam_bringup:
   # Debug: false → initial guess from integrated lidar pose only (not EKF TF).
   lidar_use_tf_initial_guess: false
 
-  # Smaller magnitude reduces over-compensation when moving toward/away from walls.
-  keyframe_deskew_imu_stamp_offset_sec: -0.004
+  # Fine phase trim for residual yaw smear (small negative keeps IMU slightly ahead of cloud stamp).
+  keyframe_deskew_imu_stamp_offset_sec: -0.002
   keyframe_deskew_cloud_stamp_offset_sec: 0.0
   # Loosen if deskew falls back during motion (less scan smear in turns; try 0.10–0.15).
   keyframe_deskew_max_imu_age_sec: 0.13
@@ -335,9 +335,9 @@ slam_bringup:
   keyframe_use_lidar_odom_for_robot_pose: true
   keyframe_lidar_odom_topic: /lidar/odom
   # Nearest /lidar/odom stamp vs cloud (only if approximate_sync false). Prefer sync below.
-  keyframe_lidar_odom_max_age_sec: 0.02
+  keyframe_lidar_odom_max_age_sec: 0.015
   keyframe_lidar_odom_approximate_sync: true
-  keyframe_lidar_odom_approx_sync_slop_sec: 0.006
+  keyframe_lidar_odom_approx_sync_slop_sec: 0.004
   # Sensor-frame prefilter: remove very near self-hits (RTK mast/chassis), far clutter, weak returns.
   keyframe_prefilter_min_range_m: 0.4
   keyframe_prefilter_max_range_m: 12.0
