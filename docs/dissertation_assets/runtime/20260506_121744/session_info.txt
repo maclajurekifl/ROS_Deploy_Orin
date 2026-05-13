@@ -1,5 +1,0 @@
-timestamp: 2026-05-06T12:17:44+01:00
-hostname: MACLA-UBUNTU-DESKTOP
-ros_distro: humble
-ros_domain_id: 10
-ros_use_sim_time_env: true

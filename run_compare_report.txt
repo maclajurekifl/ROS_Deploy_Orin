@@ -1,9 +1,0 @@
-Reference: FAST-LIO (fastlio.csv)
-Test:      LiDAR (slam_lidar7.csv)
-
-Window: ref [30.10, 80.00] s, test [30.00, 79.90] s
-Displacement (m): ref=2.293, test=1.809, ratio test/ref=0.789
-Path length (m):  ref=17.376, test=14.700, ratio test/ref=0.846
-Yaw change (deg): ref=-56.49, test=-37.27, diff=+19.22
-
-Heuristic flags:
