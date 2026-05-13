@@ -167,11 +167,14 @@ slam_bringup:
   # Disable loop closure / pose graph while front-end (NDT + EKF) is being validated against FAST-LIO.
   keyframe_loop_closure_enable: true
   start_pose_graph: true
-  # Dynamic map→odom from pose_graph_node (omit static identity in launch). Lets RViz use Fixed Frame
-  # ``map`` while /ekf/odom, /ekf/path, and /keyframe_map chain through map→odom→base_link at aligned stamps.
-  # Do **not** set ``keyframe_apply_pose_graph_map: true`` together with this — same correction twice.
-  pose_graph_publish_map_odom_tf: true
-  keyframe_apply_pose_graph_map: false
+  # Pose-graph drift correction — pick **one** (see ``keyframe_scan_map/README.md``):
+  # **A)** ``pose_graph_publish_map_odom_tf: true`` + ``keyframe_apply_pose_graph_map: false`` — TF-only fix:
+  #    merged map points are **not** warped when ``map``→``odom`` updates → ghost walls / layered scans.
+  # **B)** ``pose_graph_publish_map_odom_tf: false`` + ``keyframe_apply_pose_graph_map: true`` — rebuild ``/keyframe_map``
+  #    from corrected ``/pose_graph/corrected_keyframes`` (launch adds **static** identity ``map``→``odom``).
+  # Prefer **B** for cleaner walls when loops run; use **A** if you cannot afford map rebuilds.
+  pose_graph_publish_map_odom_tf: false
+  keyframe_apply_pose_graph_map: true
 
   livox_extrinsic_x: 0.12
   livox_extrinsic_y: -0.007
