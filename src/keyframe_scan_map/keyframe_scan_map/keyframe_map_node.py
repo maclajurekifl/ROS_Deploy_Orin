@@ -1499,6 +1499,38 @@ class KeyframeMapNode(Node):
             )
         return np.array(rows, dtype=np.float64)
 
+    def _rebuild_merged_map_from_batches(self) -> None:
+        """Voxel-merge ``_kf_map_batches`` into ``_map_pts`` (pose-graph mode only).
+
+        When pose-graph corrections are enabled, the published map must come **only** from
+        stored keyframe batches so it stays consistent with warped geometry. Incrementally
+        stacking full-resolution ``pts_map`` duplicates points vs batch-based merges and
+        produces layered walls.
+        """
+        if not self._kf_map_batches:
+            self._map_pts = None
+            self._map_intensity = None
+            return
+        merged = np.vstack(self._kf_map_batches).astype(np.float32)
+        merged_i = np.concatenate(
+            [
+                np.full((b.shape[0],), float(i + 1), dtype=np.float32)
+                for i, b in enumerate(self._kf_map_batches)
+            ]
+        )
+        self._map_pts, self._map_intensity = voxel_downsample_xyz_i(
+            merged, merged_i, self._voxel
+        )
+        if self._map_pts.shape[0] > self._max_map:
+            self.get_logger().warn(
+                f'Map points {self._map_pts.shape[0]} > max {self._max_map}; '
+                'voxel-downsampling harder',
+                throttle_duration_sec=10.0,
+            )
+            self._map_pts, self._map_intensity = voxel_downsample_xyz_i(
+                self._map_pts, self._map_intensity, self._voxel * 1.5
+            )
+
     def _on_pose_graph_path(self, msg: Path) -> None:
         if not self._apply_pg:
             return
@@ -1528,25 +1560,20 @@ class KeyframeMapNode(Node):
         ):
             return
         rebuilt: List[np.ndarray] = []
-        rebuilt_i: List[np.ndarray] = []
         for i in range(n):
             T_old = T_from_xyw(P_old[i])
             T_new = T_from_xyw(P_new[i])
             T_rel = T_new @ la.inv(T_old)
             b = transform_points_se2(T_rel, self._kf_map_batches[i])
-            rebuilt.append(b)
-            rebuilt_i.append(np.full((b.shape[0],), float(i + 1), dtype=np.float32))
-        merged = np.vstack(rebuilt)
-        merged_i = np.concatenate(rebuilt_i) if rebuilt_i else np.zeros((0,), dtype=np.float32)
-        self._map_pts, self._map_intensity = voxel_downsample_xyz_i(merged, merged_i, self._voxel)
-        if self._map_pts.shape[0] > self._max_map:
-            self._map_pts, self._map_intensity = voxel_downsample_xyz_i(
-                self._map_pts, self._map_intensity, self._voxel * 1.5
-            )
+            rebuilt.append(b.astype(np.float32))
+        # Persist warped geometry — previously ``rebuilt`` was merged for display but batches
+        # stayed pre-warp, so the next pose-graph solve applied wrong T_rel (layered walls).
+        self._kf_map_batches = rebuilt
         self._kf_poses = [
             (float(P_new[i, 0]), float(P_new[i, 1]), float(P_new[i, 2]))
             for i in range(n)
         ]
+        self._rebuild_merged_map_from_batches()
         if self._loop_enable and len(self._kf_scan_store) == n:
             for i in range(n):
                 T_old = T_from_xyw(P_old[i])
@@ -1647,31 +1674,34 @@ class KeyframeMapNode(Node):
 
         self._kf_count += 1
 
-        kf_i = float(self._kf_count)
-        new_int = np.full((pts_map.shape[0],), kf_i, dtype=np.float32)
-        if self._map_pts is None:
-            self._map_pts = pts_map
-            self._map_intensity = new_int
+        if self._apply_pg:
+            self._rebuild_merged_map_from_batches()
         else:
-            n_old = self._map_pts.shape[0]
-            if self._map_intensity is None or int(self._map_intensity.shape[0]) != n_old:
-                self._map_intensity = self._map_pts[:, 2].astype(np.float32)
-            self._map_pts = np.vstack([self._map_pts, pts_map])
-            self._map_intensity = np.concatenate([self._map_intensity, new_int])
+            kf_i = float(self._kf_count)
+            new_int = np.full((pts_map.shape[0],), kf_i, dtype=np.float32)
+            if self._map_pts is None:
+                self._map_pts = pts_map
+                self._map_intensity = new_int
+            else:
+                n_old = self._map_pts.shape[0]
+                if self._map_intensity is None or int(self._map_intensity.shape[0]) != n_old:
+                    self._map_intensity = self._map_pts[:, 2].astype(np.float32)
+                self._map_pts = np.vstack([self._map_pts, pts_map])
+                self._map_intensity = np.concatenate([self._map_intensity, new_int])
 
-        if self._map_pts.shape[0] > self._max_map:
-            self.get_logger().warn(
-                f'Map points {self._map_pts.shape[0]} > max {self._max_map}; '
-                'voxel-downsampling harder',
-                throttle_duration_sec=10.0,
-            )
+            if self._map_pts.shape[0] > self._max_map:
+                self.get_logger().warn(
+                    f'Map points {self._map_pts.shape[0]} > max {self._max_map}; '
+                    'voxel-downsampling harder',
+                    throttle_duration_sec=10.0,
+                )
+                self._map_pts, self._map_intensity = voxel_downsample_xyz_i(
+                    self._map_pts, self._map_intensity, self._voxel * 1.5
+                )
+
             self._map_pts, self._map_intensity = voxel_downsample_xyz_i(
-                self._map_pts, self._map_intensity, self._voxel * 1.5
+                self._map_pts, self._map_intensity, self._voxel
             )
-
-        self._map_pts, self._map_intensity = voxel_downsample_xyz_i(
-            self._map_pts, self._map_intensity, self._voxel
-        )
         self._apply_auto_level_if_ready()
 
         now_mono = self.get_clock().now().nanoseconds
