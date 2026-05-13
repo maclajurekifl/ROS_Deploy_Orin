@@ -96,6 +96,10 @@ slam_bringup:
   ekf_imu_auto_gyro_z_bias_tune_sec: 5.0
   # 1.0 normal; -1.0 if integrated yaw runs opposite (TF/sign experiment).
   ekf_imu_gyro_z_scale: 1.0
+  # Planar speed from ``/lidar/odom`` twist (m/s): below this, multiply pose (+ yaw if fused) variance by scale.
+  # Reduces EKF slam-back jitter when slowing/stopped (LIO scan noise). **0** disables.
+  ekf_lidar_fuse_slow_linear_speed_m_s: 0.12
+  ekf_lidar_pose_var_below_slow_speed_scale: 25.0
 
   # NDT defaults tuned vs FAST-LIO (locked-window bench 2026-05: voxel 0.46 vs 0.38 lowered align RMSE).
   lidar_voxel_leaf_size: 0.4
@@ -363,6 +367,8 @@ slam_bringup:
   keyframe_auto_level_max_tilt_deg: 35.0
 
   pose_graph_map_odom_tf_period_sec: 0.1
+  # Low-pass on pose-graph ``map``→``odom`` SE(2): **1.0** = snap each optimize (legacy); **0.15–0.35** reduces skew/jumps.
+  pose_graph_map_odom_tf_smooth_alpha: 0.22
   # Reject ``/ekf/odom`` header stamps this far behind wall clock when stamping map→odom (stale DDS / replay).
   pose_graph_odom_stamp_max_past_sec: 25.0
   pose_graph_odom_stamp_max_future_sec: 2.0

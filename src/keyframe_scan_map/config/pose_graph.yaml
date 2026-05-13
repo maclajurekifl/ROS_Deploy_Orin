@@ -15,6 +15,7 @@ pose_graph_node:
     # =========================================================================
 
     map_odom_tf_period_sec: 0.1
+    map_odom_tf_smooth_alpha: 1.0
     keyframes_topic: /keyframe_map/keyframes
     loop_pair_topic: /keyframe_map/loop_closure_pair
     output_path_topic: /pose_graph/corrected_keyframes

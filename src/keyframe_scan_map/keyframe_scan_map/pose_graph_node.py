@@ -93,6 +93,9 @@ class PoseGraphNode(Node):
         self.declare_parameter('max_loop_edges', 40)
         self.declare_parameter('publish_map_odom_tf', False)
         self.declare_parameter('map_odom_tf_period_sec', 0.1)
+        # SE(2) low-pass on map→odom: 1.0 = use each graph solve as-is; **0.1–0.35** eases TF jumps / map skew
+        # when new keyframes or loop edges re-optimize the chain.
+        self.declare_parameter('map_odom_tf_smooth_alpha', 1.0)
         # Stamp map→odom with latest /ekf/odom time so tf2 matches lidar-timed odom→base_link.
         self.declare_parameter('odom_stamp_topic', '/ekf/odom')
         # Ignore /ekf/odom samples whose header stamp is this far behind node clock (stale DDS / replay).
@@ -111,6 +114,10 @@ class PoseGraphNode(Node):
         self._max_loops = int(self.get_parameter('max_loop_edges').value)
         self._pub_tf = bool(self.get_parameter('publish_map_odom_tf').value)
         self._tf_period = float(self.get_parameter('map_odom_tf_period_sec').value)
+        self._map_odom_smooth_alpha = float(
+            self.get_parameter('map_odom_tf_smooth_alpha').value
+        )
+        self._map_odom_smooth_have_prior = False
 
         self._P_init: np.ndarray = np.zeros((0, 3), dtype=np.float64)
         self._loop_edges: List[Tuple[int, int]] = []
@@ -149,6 +156,11 @@ class PoseGraphNode(Node):
         self.get_logger().info(
             f'pose_graph: keyframes={self._kf_topic} -> {self._out_topic} '
             f'publish_map_odom_tf={self._pub_tf}'
+            + (
+                f' map_odom_smooth_alpha={self._map_odom_smooth_alpha:g}'
+                if self._pub_tf and self._map_odom_smooth_alpha < 1.0 - 1e-9
+                else ''
+            )
         )
 
     def _on_odom_stamp(self, msg: Odometry) -> None:
@@ -296,7 +308,28 @@ class PoseGraphNode(Node):
         )
 
         if self._pub_tf:
-            self._T_map_odom = T_from_xyw(P_opt[-1]) @ la.inv(T_from_xyw(P0[-1]))
+            T_new = T_from_xyw(P_opt[-1]) @ la.inv(T_from_xyw(P0[-1]))
+            a = max(0.0, min(1.0, float(self._map_odom_smooth_alpha)))
+            if not self._map_odom_smooth_have_prior or a >= 1.0 - 1e-12:
+                self._T_map_odom = T_new
+                self._map_odom_smooth_have_prior = True
+            else:
+                T_old = self._T_map_odom
+                tx_o, ty_o = float(T_old[0, 2]), float(T_old[1, 2])
+                tx_n, ty_n = float(T_new[0, 2]), float(T_new[1, 2])
+                yaw_o = math.atan2(float(T_old[1, 0]), float(T_old[0, 0]))
+                yaw_n = math.atan2(float(T_new[1, 0]), float(T_new[0, 0]))
+                dyaw = math.atan2(
+                    math.sin(yaw_n - yaw_o), math.cos(yaw_n - yaw_o)
+                )
+                yaw_s = yaw_o + a * dyaw
+                cs, sn = math.cos(yaw_s), math.sin(yaw_s)
+                Ts = np.eye(3, dtype=np.float64)
+                Ts[0, 0], Ts[0, 1] = cs, -sn
+                Ts[1, 0], Ts[1, 1] = sn, cs
+                Ts[0, 2] = (1.0 - a) * tx_o + a * tx_n
+                Ts[1, 2] = (1.0 - a) * ty_o + a * ty_n
+                self._T_map_odom = Ts
 
 
 def main() -> None:

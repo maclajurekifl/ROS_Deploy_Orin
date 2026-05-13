@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import math
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -142,6 +145,11 @@ class EKFNode(Node):
         # After gated xy,yaw reject (NDT path), run one soft ungated update (large R). Default
         # true: avoids gyro-only coast when NIS fails on yaw but |Δxy| is small.
         self.declare_parameter("lidar_soft_fuse_after_gate_reject", True)
+        # Planar speed from /lidar/odom twist.linear (or EKF vx,vy when absent): below this threshold,
+        # multiply lidar_pose_var (+ yaw var when fused) by lidar_pose_var_below_slow_speed_scale so
+        # scan-matching jitter while stopped/slow does not yank the EKF (LIO/NDT noise at v≈0).
+        self.declare_parameter("lidar_fuse_slow_linear_speed_m_s", 0.0)
+        self.declare_parameter("lidar_pose_var_below_slow_speed_scale", 25.0)
 
         imu_topic = self.get_parameter("imu_topic").value
         self.pub_topic = self.get_parameter("publish_topic").value
@@ -200,6 +208,12 @@ class EKFNode(Node):
         self.lidar_gate_nis = float(self.get_parameter("lidar_gate_nis").value)
         self._lidar_soft_fuse_after_reject = bool(
             self.get_parameter("lidar_soft_fuse_after_gate_reject").value
+        )
+        self._lidar_slow_speed_m = float(
+            self.get_parameter("lidar_fuse_slow_linear_speed_m_s").value
+        )
+        self._lidar_slow_var_scale = max(
+            1.0, float(self.get_parameter("lidar_pose_var_below_slow_speed_scale").value)
         )
         # Throttle state only; re-read lidar_fusion_debug_log each callback so
         # ``ros2 param set`` works without restart.
@@ -627,6 +641,10 @@ class EKFNode(Node):
             msg.pose.pose.position.z,
             msg.pose.pose.orientation,
             meas_stamp,
+            twist_linear_xy=(
+                float(msg.twist.twist.linear.x),
+                float(msg.twist.twist.linear.y),
+            ),
         )
 
     def lidar_pose_callback(self, msg: PoseStamped):
@@ -637,6 +655,7 @@ class EKFNode(Node):
             msg.pose.position.z,
             msg.pose.orientation,
             meas_stamp,
+            twist_linear_xy=None,
         )
 
     def lidar_z_callback(self, msg: Float64):
@@ -663,10 +682,39 @@ class EKFNode(Node):
         for idx in (EKFPlanarIMU.I_VX, EKFPlanarIMU.I_VY):
             self.ekf.P[idx, idx] = max(float(self.ekf.P[idx, idx]), 0.8)
 
-    def _fuse_lidar_pose(self, px, py, z, orientation: Quaternion, stamp):
+    def _effective_lidar_meas_vars(
+        self, twist_linear_xy: Optional[Tuple[float, float]]
+    ) -> Tuple[float, float]:
+        """Scale pose/yaw measurement variance when reported planar speed is low (LIO jitter at rest)."""
+        base_p = float(self.lidar_pose_var)
+        base_y = float(self.lidar_yaw_var)
+        if self._lidar_slow_speed_m <= 1e-9:
+            return base_p, base_y
+        if twist_linear_xy is None:
+            st = self.ekf.get_state()
+            vx = float(st[EKFPlanarIMU.I_VX])
+            vy = float(st[EKFPlanarIMU.I_VY])
+        else:
+            vx, vy = float(twist_linear_xy[0]), float(twist_linear_xy[1])
+        sp = math.hypot(vx, vy)
+        if sp >= self._lidar_slow_speed_m:
+            return base_p, base_y
+        return base_p * self._lidar_slow_var_scale, base_y * self._lidar_slow_var_scale
+
+    def _fuse_lidar_pose(
+        self,
+        px,
+        py,
+        z,
+        orientation: Quaternion,
+        stamp,
+        twist_linear_xy: Optional[Tuple[float, float]] = None,
+    ):
         # Planar correction: use yaw only; roll/pitch from LiDAR are ignored.
         q = [orientation.x, orientation.y, orientation.z, orientation.w]
         _roll, _pitch, yaw = euler_from_quaternion(q)
+
+        var_p, var_y = self._effective_lidar_meas_vars(twist_linear_xy)
 
         px_e0 = float(self.ekf.x[EKFPlanarIMU.I_PX])
         py_e0 = float(self.ekf.x[EKFPlanarIMU.I_PY])
@@ -680,7 +728,7 @@ class EKFNode(Node):
                     self.ekf.nis_lidar_xy(
                         float(px),
                         float(py),
-                        self.lidar_pose_var,
+                        var_p,
                     )
                 )
             else:
@@ -689,8 +737,8 @@ class EKFNode(Node):
                         float(px),
                         float(py),
                         float(yaw),
-                        self.lidar_pose_var,
-                        self.lidar_yaw_var,
+                        var_p,
+                        var_y,
                     )
                 )
 
@@ -703,8 +751,8 @@ class EKFNode(Node):
                 roll=float(_roll),
                 pitch=float(_pitch),
                 yaw=float(yaw),
-                var=self.lidar_pose_var,
-                var_yaw=self.lidar_yaw_var,
+                var=var_p,
+                var_yaw=var_y,
                 use_roll_pitch=self.lidar_use_roll_pitch,
                 gate_nis=self.lidar_gate_nis,
             )
@@ -712,7 +760,7 @@ class EKFNode(Node):
             applied_gated = self.ekf.update_lidar_xy(
                 float(px),
                 float(py),
-                self.lidar_pose_var,
+                var_p,
                 gate_nis=self.lidar_gate_nis,
             )
         else:
@@ -720,8 +768,8 @@ class EKFNode(Node):
                 px=float(px),
                 py=float(py),
                 yaw=float(yaw),
-                var=self.lidar_pose_var,
-                var_yaw=self.lidar_yaw_var,
+                var=var_p,
+                var_yaw=var_y,
                 gate_nis=self.lidar_gate_nis,
             )
         applied = applied_gated
@@ -768,7 +816,7 @@ class EKFNode(Node):
                     applied_soft = self.ekf.update_lidar_xy(
                         float(px),
                         float(py),
-                        var=max(float(self.lidar_pose_var), 0.02) * 4.0,
+                        var=max(float(var_p), 0.02) * 4.0,
                         gate_nis=None,
                     )
                 else:
@@ -776,8 +824,8 @@ class EKFNode(Node):
                         px=float(px),
                         py=float(py),
                         yaw=float(yaw),
-                        var=max(float(self.lidar_pose_var), 0.02) * 4.0,
-                        var_yaw=max(float(self.lidar_yaw_var), 0.01) * 4.0,
+                        var=max(float(var_p), 0.02) * 4.0,
+                        var_yaw=max(float(var_y), 0.01) * 4.0,
                         gate_nis=None,
                     )
                 applied = applied or applied_soft

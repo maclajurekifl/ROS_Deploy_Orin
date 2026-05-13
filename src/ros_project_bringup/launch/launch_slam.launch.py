@@ -585,6 +585,12 @@ def launch_setup(context, *args, **kwargs):
         'lidar_delta_vel_var': float(U.get('ekf_lidar_delta_vel_var', 0.22)),
         'lidar_delta_gate_nis': float(U.get('ekf_lidar_delta_gate_nis', 200.0)),
         'lidar_delta_nominal_dt_sec': float(U.get('ekf_lidar_delta_nominal_dt_sec', 0.1)),
+        'lidar_fuse_slow_linear_speed_m_s': float(
+            U.get('ekf_lidar_fuse_slow_linear_speed_m_s', 0.0) or 0.0
+        ),
+        'lidar_pose_var_below_slow_speed_scale': float(
+            U.get('ekf_lidar_pose_var_below_slow_speed_scale', 25.0) or 25.0
+        ),
     }
 
     imu_topic_effective = str(U['ekf_imu_topic']).strip()
@@ -1075,6 +1081,9 @@ def launch_setup(context, *args, **kwargs):
             'max_graph_nodes': int(U['pose_graph_max_nodes']),
             'max_loop_edges': int(U['pose_graph_max_loop_edges']),
             'map_odom_tf_period_sec': float(U['pose_graph_map_odom_tf_period_sec']),
+            'map_odom_tf_smooth_alpha': float(
+                U.get('pose_graph_map_odom_tf_smooth_alpha', 1.0)
+            ),
         }
         _pg_delay_raw = U.get('pose_graph_node_start_delay_sec', None)
         if _pg_delay_raw is None:
