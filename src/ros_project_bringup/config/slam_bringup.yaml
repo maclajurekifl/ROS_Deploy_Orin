@@ -25,6 +25,12 @@
 # `use_sim_time` is set from the launch arg (default **false** = wall clock). Bag replay: pass
 # ``use_sim_time:=true`` and play with ``ros2 bag play ... --clock``. Start `launch_slam` *before* the bag
 # so `/clock` does not advance ahead of the stack (avoids flipped / mirrored first alignment).
+# **ZED (or any camera) on the same ROS_DOMAIN_ID:** if the ZED wrapper publishes ``odom``→``zed_camera_link``
+# (positional tracking) while this stack publishes ``map``→``odom`` and ``odom``→``base_link``, both compete
+# for ``odom``. Stopped or mis-clocked ZED nodes leave **old** ZED TF stamps in the buffer → ``TF_OLD_DATA``
+# for frame ``odom`` (``view_frames`` shows ``zed_*`` at past times vs fresh ``base_link``). Fix: disable ZED
+# publish_tf / odometry TF (camera-only), run ZED on another ``ROS_DOMAIN_ID``, or do not run ZED while SLAM
+# is validating TF.
 # -----------------------------------------------------------------------------
 
 slam_bringup:
