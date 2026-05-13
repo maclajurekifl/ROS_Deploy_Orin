@@ -113,7 +113,7 @@ slam_bringup:
   lidar_use_tf_initial_guess: false
 
   # Fine phase trim for residual yaw smear (small negative keeps IMU slightly ahead of cloud stamp).
-  keyframe_deskew_imu_stamp_offset_sec: -0.002
+  keyframe_deskew_imu_stamp_offset_sec: -0.001
   keyframe_deskew_cloud_stamp_offset_sec: 0.0
   # Loosen if deskew falls back during motion (less scan smear in turns; try 0.10–0.15).
   keyframe_deskew_max_imu_age_sec: 0.13
