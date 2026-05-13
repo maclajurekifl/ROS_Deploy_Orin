@@ -780,7 +780,11 @@ def launch_setup(context, *args, **kwargs):
     if imu_link_to_sensor_bridge is not None:
         actions.append(imu_link_to_sensor_bridge)
     # EKF must publish odom->base_link before NDT uses it as scan_to_map initial guess (avoid first-cloud fallback).
-    actions.append(ekf_node)
+    _ekf_delay = float(U.get('ekf_node_start_delay_sec', 0.0) or 0.0)
+    if _ekf_delay > 0.0:
+        actions.append(TimerAction(period=_ekf_delay, actions=[ekf_node]))
+    else:
+        actions.append(ekf_node)
 
     # EMA low-pass: NDT publishes raw; this republishes smoothed to ``lidar_odom_topic`` for EKF/tools.
     _smooth_lidar = bool(U.get('lidar_odom_smooth_enable', False))
