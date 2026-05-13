@@ -28,6 +28,7 @@ from builtin_interfaces.msg import Time as StampMsg
 from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
+from rclpy.time import Time
 from std_msgs.msg import Int32MultiArray
 from tf2_ros import TransformBroadcaster
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
@@ -94,6 +95,10 @@ class PoseGraphNode(Node):
         self.declare_parameter('map_odom_tf_period_sec', 0.1)
         # Stamp map→odom with latest /ekf/odom time so tf2 matches lidar-timed odom→base_link.
         self.declare_parameter('odom_stamp_topic', '/ekf/odom')
+        # Ignore /ekf/odom samples whose header stamp is this far behind node clock (stale DDS / replay).
+        self.declare_parameter('odom_stamp_max_past_sec', 25.0)
+        # Ignore stamps this far in the future vs clock (bad clock sync).
+        self.declare_parameter('odom_stamp_max_future_sec', 2.0)
 
         self._kf_topic = self.get_parameter('keyframes_topic').value
         self._pair_topic = self.get_parameter('loop_pair_topic').value
@@ -113,6 +118,14 @@ class PoseGraphNode(Node):
         self._T_map_odom = np.eye(3, dtype=np.float64)
         self._tf_broadcaster: TransformBroadcaster | None = None
         self._last_odom_stamp: StampMsg | None = None
+        self._odom_stamp_max_past = max(
+            0.5, float(self.get_parameter('odom_stamp_max_past_sec').value)
+        )
+        self._odom_stamp_max_future = max(
+            0.05, float(self.get_parameter('odom_stamp_max_future_sec').value)
+        )
+        self._warned_stale_odom_stamp = False
+        self._odom_stamp_topic = ''
 
         self.create_subscription(Path, self._kf_topic, self._on_path, 10)
         self.create_subscription(Int32MultiArray, self._pair_topic, self._on_loop_pair, 20)
@@ -123,6 +136,7 @@ class PoseGraphNode(Node):
             period = max(0.05, self._tf_period)
             self.create_timer(period, self._publish_map_odom_tf)
             stamp_topic = str(self.get_parameter('odom_stamp_topic').value).strip()
+            self._odom_stamp_topic = stamp_topic
             if stamp_topic:
                 self.create_subscription(Odometry, stamp_topic, self._on_odom_stamp, 10)
 
@@ -138,7 +152,29 @@ class PoseGraphNode(Node):
         )
 
     def _on_odom_stamp(self, msg: Odometry) -> None:
-        self._last_odom_stamp = msg.header.stamp
+        """Latch latest *reasonable* /ekf/odom stamp for map→odom TF (avoids TF_OLD_DATA from stale DDS)."""
+        st = msg.header.stamp
+        t = Time.from_msg(st)
+        now = self.get_clock().now()
+        age_past = (now - t).nanoseconds * 1e-9
+        age_future = (t - now).nanoseconds * 1e-9
+        if age_future > self._odom_stamp_max_future:
+            return
+        if age_past > self._odom_stamp_max_past:
+            if not self._warned_stale_odom_stamp:
+                self.get_logger().warn(
+                    f'Ignoring {self._odom_stamp_topic!r} stamps '
+                    f'> {self._odom_stamp_max_past:.1f}s behind clock (stale interleaved messages / '
+                    f'another host on ROS_DOMAIN_ID). map→odom uses wall time until fresh odom.',
+                    throttle_duration_sec=30.0,
+                )
+                self._warned_stale_odom_stamp = True
+            return
+        if self._last_odom_stamp is None:
+            self._last_odom_stamp = st
+            return
+        if t >= Time.from_msg(self._last_odom_stamp):
+            self._last_odom_stamp = st
 
     def _publish_map_odom_tf(self) -> None:
         if self._tf_broadcaster is None:

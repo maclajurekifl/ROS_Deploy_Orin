@@ -1045,13 +1045,23 @@ def launch_setup(context, *args, **kwargs):
             output='screen',
             parameters=[keyframe_params, keyframe_overrides, sim_time_param],
         )
-        actions.append(keyframe_node)
+        _kf_delay = float(U.get('keyframe_map_node_start_delay_sec', 0.0) or 0.0)
+        if _kf_delay > 0.0:
+            actions.append(TimerAction(period=_kf_delay, actions=[keyframe_node]))
+        else:
+            actions.append(keyframe_node)
 
     if start_keyframe_map and start_pose_graph:
         pose_graph_yaml = _share_file(U['pose_graph_params_pkg'], U['pose_graph_params_yaml'])
         pose_graph_overrides = {
             'publish_map_odom_tf': pose_graph_pub_tf,
             'odom_stamp_topic': str(U['ekf_publish_topic']).strip(),
+            'odom_stamp_max_past_sec': float(
+                U.get('pose_graph_odom_stamp_max_past_sec', 25.0) or 25.0
+            ),
+            'odom_stamp_max_future_sec': float(
+                U.get('pose_graph_odom_stamp_max_future_sec', 2.0) or 2.0
+            ),
             'weight_odom': float(U['pose_graph_weight_odom']),
             'weight_loop': float(U['pose_graph_weight_loop']),
             'max_graph_nodes': int(U['pose_graph_max_nodes']),
