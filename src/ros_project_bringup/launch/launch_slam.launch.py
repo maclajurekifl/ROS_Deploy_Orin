@@ -1068,15 +1068,22 @@ def launch_setup(context, *args, **kwargs):
             'max_loop_edges': int(U['pose_graph_max_loop_edges']),
             'map_odom_tf_period_sec': float(U['pose_graph_map_odom_tf_period_sec']),
         }
-        actions.append(
-            Node(
-                package='keyframe_scan_map',
-                executable='pose_graph_node',
-                name='pose_graph_node',
-                output='screen',
-                parameters=[pose_graph_yaml, pose_graph_overrides, sim_time_param],
-            )
+        _pg_delay_raw = U.get('pose_graph_node_start_delay_sec', None)
+        if _pg_delay_raw is None:
+            _pg_delay = float(U.get('keyframe_map_node_start_delay_sec', 0.0) or 0.0)
+        else:
+            _pg_delay = float(_pg_delay_raw or 0.0)
+        pose_graph_node = Node(
+            package='keyframe_scan_map',
+            executable='pose_graph_node',
+            name='pose_graph_node',
+            output='screen',
+            parameters=[pose_graph_yaml, pose_graph_overrides, sim_time_param],
         )
+        if _pg_delay > 0.0:
+            actions.append(TimerAction(period=_pg_delay, actions=[pose_graph_node]))
+        else:
+            actions.append(pose_graph_node)
 
     if start_rviz:
         rviz_cfg = _share_file(U['rviz_config_pkg'], U['rviz_config_yaml'])
