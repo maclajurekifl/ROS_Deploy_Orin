@@ -96,9 +96,10 @@ slam_bringup:
   ekf_imu_auto_gyro_z_bias_tune_sec: 5.0
   # 1.0 normal; -1.0 if integrated yaw runs opposite (TF/sign experiment).
   ekf_imu_gyro_z_scale: 1.0
-  # Below this planar speed (m/s), inflate LiDAR pose variance — gate uses ``max(|twist|,|EKF v|)``. **0** = off.
-  ekf_lidar_fuse_slow_linear_speed_m_s: 0.0
-  ekf_lidar_pose_var_below_slow_speed_scale: 25.0
+  # Below this planar speed (m/s), inflate LiDAR pose variance — gate uses ``max(|twist|,|EKF v|)``.
+  # Re-enabled to calm stop/slow jitter without weakening normal-motion fusion.
+  ekf_lidar_fuse_slow_linear_speed_m_s: 0.10
+  ekf_lidar_pose_var_below_slow_speed_scale: 16.0
 
   # NDT defaults tuned vs FAST-LIO (locked-window bench 2026-05: voxel 0.46 vs 0.38 lowered align RMSE).
   lidar_voxel_leaf_size: 0.4
@@ -111,7 +112,8 @@ slam_bringup:
   # Debug: false → initial guess from integrated lidar pose only (not EKF TF).
   lidar_use_tf_initial_guess: false
 
-  keyframe_deskew_imu_stamp_offset_sec: -0.01
+  # Smaller magnitude reduces over-compensation when moving toward/away from walls.
+  keyframe_deskew_imu_stamp_offset_sec: -0.004
   keyframe_deskew_cloud_stamp_offset_sec: 0.0
   # Loosen if deskew falls back during motion (less scan smear in turns; try 0.10–0.15).
   keyframe_deskew_max_imu_age_sec: 0.13
@@ -333,9 +335,9 @@ slam_bringup:
   keyframe_use_lidar_odom_for_robot_pose: true
   keyframe_lidar_odom_topic: /lidar/odom
   # Nearest /lidar/odom stamp vs cloud (only if approximate_sync false). Prefer sync below.
-  keyframe_lidar_odom_max_age_sec: 0.03
+  keyframe_lidar_odom_max_age_sec: 0.02
   keyframe_lidar_odom_approximate_sync: true
-  keyframe_lidar_odom_approx_sync_slop_sec: 0.01
+  keyframe_lidar_odom_approx_sync_slop_sec: 0.006
   # Sensor-frame prefilter: remove very near self-hits (RTK mast/chassis), far clutter, weak returns.
   keyframe_prefilter_min_range_m: 0.4
   keyframe_prefilter_max_range_m: 12.0
@@ -358,9 +360,8 @@ slam_bringup:
   keyframe_tf_lookup_timeout_sec: 0.25
   keyframe_tf_buffer_cache_sec: 180.0
   keyframe_deskew_imu_topic: /livox/imu
-  # ``yaw_only``: ωz-only deskew — often cleaner on **flat** runs when rodrigues couples noisy ωx/ωy after IMU→Livox rotation.
-  # Use **rodrigues** if the robot pitches/rolls noticeably in turns.
-  keyframe_deskew_model: yaw_only
+  # Full 3D gyro deskew; helps translational smear under mild pitch/roll + mounting offsets.
+  keyframe_deskew_model: rodrigues
   keyframe_deskew_imu_buffer_max_samples: 768
   keyframe_deskew_imu_interpolate: true
   keyframe_deskew_mean_gyro_fallback: true
