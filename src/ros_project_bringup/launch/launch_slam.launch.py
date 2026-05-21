@@ -1,87 +1,5 @@
 #!/usr/bin/env python3
-"""
-Bringup: Livox (optional) + static TF + EKF + optional NDT **or** optional FAST-LIO
-(LIO) + optional keyframe scan map + optional RViz.
 
-**Split (front vs back):** **Front-end (fast)** — IMU + LiDAR odom (NDT or LIO relay) + **ekf_node**.
-**Back-end (slow)** — keyframe merged map, optional loop detection, optional **pose_graph_node**
-(map optimisation on keyframes + loop pairs).
-
-Default odometry is **FAST-LIO** + Python EKF (``use_lio: true``, ``use_lidar_fusion: false`` in
-``slam_bringup.yaml``). For **PCL NDT** instead, set **``use_lio: false``** and **``use_lidar_fusion: true``**
-(or pass ``use_lio:=false`` ``use_lidar_fusion:=true``, or merge ``config/livox_ndt_bag_axes_overlay.yaml``).
-**``use_lio``** wins if both **``use_lidar_fusion``** and **``use_lio``** are true.
-
---- use_lio:=true — what changes (memory aid) ---
-Replaced: **lidar_odometry_node** (NDT) is NOT started; it no longer publishes
-**/lidar/odom** or **/lidar/relative_motion**.
-Added: **fastlio_mapping** + **lio_odom_relay_node** (**/Odometry** → **/lidar/odom**
-with **odom**→**base_link** headers). Default **lio_relay_publish_tf** is **false** (EKF publishes
-dense **odom**→**base_link** TF for keyframe interpolation). Set **lio_relay_publish_tf** true and
-**ekf_publish_tf_when_lio** false only if you want the relay as sole TF authority (sparse ~scan rate).
-Unchanged: Livox driver, static TFs (**base_link**→**livox_frame**); **map**→**odom** is
-static identity unless **pose_graph_publish_map_odom_tf** is true with **start_pose_graph**
-(then pose_graph_node publishes **map**→**odom**).
-**ekf_node** (still subscribes **/lidar/odom** when LIO or NDT path is on),
-**keyframe_map_node**, RViz. **use_lidar_fusion** means “start NDT”; with **use_lio**,
-NDT is skipped even if **use_lidar_fusion** is true. IMU-only: both flags false.
-EKF **lidar_fuse_z_from_odom** in ``slam_bringup.yaml``: **``auto``** (true when LIO, false
-for NDT), **``true``**, or **``false``**. Tune LIO in
-**lio_bringup/config/fastlio_mid360_overlay.yaml** (``lio_overlay_params_file`` in YAML),
-or the FAST_LIO base file.
-
-**Configuration (primary):** **``config/slam_bringup.yaml``** in ``ros_project_bringup`` (see header
-in that file). Optional: **``bringup_config``** launch arg or **``ROS_PROJECT_SLAM_CONFIG``** env
-points to a *partial* YAML (merged over the installed default — convenient in Docker).
-
-**``launch_sensors``** (launch argument, default ``false``): when ``false``, this launch does **not**
-start Livox / Microstrain drivers. Sensors and (usually) ``/tf_static`` come from **robot bringup** on
-the same machine or over DDS (same ``ROS_DOMAIN_ID``). Set ``launch_sensors:=true`` to start drivers
-here (e.g. all-in-one dev machine).
-
-**Microstrain IMU origin** (``slam_bringup.yaml`` ``microstrain_imu_origin``): ``robot`` = subscribe to
-``microstrain_imu_topic`` only (typical with ``launch_sensors:=false``). ``local`` = start the serial
-driver on **this** host when ``launch_sensors`` is true.
-
-**``use_sim_time``** (launch argument, default ``false``): wall clock for live robot. Bag replay:
-``use_sim_time:=true`` then ``ros2 bag play <bag> --clock``.
-
-**``start_rviz``** (launch arg, optional): non-empty overrides YAML ``start_rviz`` (default **false** —
-run RViz on another PC on the same domain).
-
-**Single command (live SLAM, typical robot + second PC for RViz):**
-  ``ros2 launch ros_project_bringup launch_slam.launch.py``
-
-**Robot with local USB sensors in this launch:** ``ros2 launch ros_project_bringup launch_slam.launch.py launch_sensors:=true``
-  (and ``microstrain_imu_origin: local`` in YAML on that machine).
-
-**Bag replay:** ``ros2 launch ros_project_bringup launch_slam.launch.py use_sim_time:=true`` then play the bag.
-If the bag lacks ``/tf_static``, use a bringup overlay with ``publish_robot_static_tf_when_sensors_off: true``
-(and often ``publish_livox_imu_sensor_frame_tf: true``).
-
-**Start order (bag replay):** launch **``launch_slam`` first**, wait until nodes (and RViz if used) are up,
-then start ``ros2 bag play ... --clock``. If the bag runs **first**, ``/clock`` advances while the stack is
-not subscribed; the first scans after bringup can align NDT / keyframe with a **wrong initial yaw**
-(**mirrored or flipped map** vs starting together from t=0).
-
-**Default installed YAML / assets** (paths set in ``config/slam_bringup.yaml``):
-
-| Node / stack | Package | Default file (under ``share/<pkg>/``) |
-|--------------|---------|--------------------------------------|
-| **All bringup** | ``ros_project_bringup`` | ``config/slam_bringup.yaml`` (``bringup_config`` or ``ROS_PROJECT_SLAM_CONFIG``) |
-| **ekf_node** | ``localisation_ekf`` | ``ekf_params_yaml`` in bringup (e.g. ``config/ekf_python.yaml``) |
-| **lidar_odometry_node** (NDT) | (params from bringup) | see ``slam_bringup`` keys ``lidar_*`` |
-| **fastlio_mapping** | ``fast_lio`` | ``fastlio_params_file`` in bringup |
-| **FAST-LIO overlay** | ``lio_bringup`` | ``lio_overlay_params_file`` in bringup |
-| **keyframe_map_node** | ``keyframe_scan_map`` | ``keyframe_params_yaml`` + per-keyframe ``keyframe_*`` in bringup |
-| **pose_graph_node** | ``keyframe_scan_map`` | ``pose_graph_params_yaml`` + ``pose_graph_*`` in bringup |
-| **Livox driver** | ``livox_ros_driver2`` | ``livox_*`` in bringup + ``MID360_config.json`` (or ``livox_config_path``) |
-| **RViz** | ``ros_project_bringup`` | ``rviz_config_yaml`` in bringup |
-| **Microstrain GX5-25** | ``microstrain_inertial_driver`` (apt / source) | Port/baud/rates: ``use_microstrain_imu`` and ``microstrain_*`` in bringup; driver loads ``params.yml``; see README |
-
-**GX5-25 + Livox LiDAR:** set ``use_microstrain_imu: true`` and ``ekf_params_yaml`` to
-``config/ekf_python_gx5_microstrain.yaml`` in bringup. See README §1.3.
-"""
 from __future__ import annotations
 
 import math
@@ -105,13 +23,10 @@ from launch_ros.actions import Node, SetUseSimTime
 from launch_ros.substitutions import FindPackageShare
 
 
-# =============================================================================
-# Config: `config/slam_bringup.yaml` — loaded at launch (see _load_slam_bringup_config)
-# =============================================================================
 
 
 def _resolve_slam_bringup_overlay_path(context) -> str:
-    """Path to a YAML file merged over installed defaults: ``slam_bringup`` mapping."""
+
     cfg_arg = LaunchConfiguration('bringup_config').perform(context).strip()
     if cfg_arg:
         p = os.path.abspath(os.path.expanduser(cfg_arg))
@@ -132,8 +47,7 @@ def _resolve_slam_bringup_overlay_path(context) -> str:
 
 
 def _load_slam_bringup_config(overlay_path: str) -> dict:
-    """If ``overlay_path`` is the same file as the installed default, return it once. Otherwise
-    deep-merge: installed ``slam_bringup`` dict then overlay (partial files supported)."""
+
     default_path = os.path.join(
         get_package_share_directory('ros_project_bringup'),
         'config',
@@ -213,7 +127,7 @@ def _rviz_config_with_keyframe_dot_overrides(
     keyframe_pixels: str,
     keyframe_size_m: str,
 ) -> str:
-    """Return base rviz config path or a temp config with Keyframe map point size overrides."""
+
     px_raw = str(keyframe_pixels or '').strip()
     m_raw = str(keyframe_size_m or '').strip()
     if not px_raw and not m_raw:
@@ -252,7 +166,6 @@ def launch_setup(context, *args, **kwargs):
     U = _load_slam_bringup_config(
         _resolve_slam_bringup_overlay_path(context)
     )
-    # CLI overrides (empty = keep value from slam_bringup YAML merge).
     _lio_arg = LaunchConfiguration('use_lio').perform(context).strip().lower()
     if _lio_arg not in ('', 'auto', 'use_yaml', '__yaml__'):
         U['use_lio'] = _lio_arg in ('true', '1', 'yes', 'on')
@@ -341,10 +254,6 @@ def launch_setup(context, *args, **kwargs):
     start_microstrain_driver = (
         use_microstrain_imu and launch_sensors and _imu_origin_local
     )
-    # Mount TF: with local USB driver, publish mount here. With ``launch_sensors:=false`` (bag / DDS laptop),
-    # many bags omit ``base_link``→``imu_link``; optional publish from ``imu_mount_*`` (see
-    # ``publish_robot_static_tf_when_sensors_off``). For ``robot`` IMU on a live robot that already
-    # publishes this static TF on DDS, set that key false to avoid duplicates.
     _robot_static_when_sensors_off = bool(
         U.get('publish_robot_static_tf_when_sensors_off', True)
     )
@@ -367,8 +276,6 @@ def launch_setup(context, *args, **kwargs):
     pitch_rad = math.radians(lp)
     yaw_rad = math.radians(lyaw)
 
-    # map ≡ odom: explicit identity so map→odom is clearly valid (odometry lives in odom; map aligned until pose_graph Option 3).
-    # Static TF often shows a huge “rate” in tf2_monitor; that is normal, not “missing data”.
     map_to_odom = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -425,8 +332,6 @@ def launch_setup(context, *args, **kwargs):
     lxi_r = float(U.get('livox_imu_bridge_roll_deg', 0.0) or 0.0)
     lxi_p = float(U.get('livox_imu_bridge_pitch_deg', 0.0) or 0.0)
     lxi_y = float(U.get('livox_imu_bridge_yaw_deg', 0.0) or 0.0)
-    # Livox IMU chip vs cloud frame when the driver is not on this host. Child must NOT be
-    # `sensor` if Microstrain uses that frame_id — it would steal TF from the GX5 (see slam_bringup header).
     livox_frame_to_imu_bridge = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -538,7 +443,6 @@ def launch_setup(context, *args, **kwargs):
         ms_params['port'] = port
         ms_params['baudrate'] = baud
         _ms_imu_frame = str(U['microstrain_frame_id']).strip()
-        # Vendor params often default imu_frame_id to "sensor"; Imu.header may use this, not frame_id.
         ms_params['frame_id'] = _ms_imu_frame
         ms_params['imu_frame_id'] = _ms_imu_frame
         ms_params['mount_frame_id'] = str(U['microstrain_mount_frame_id']).strip()
@@ -598,7 +502,6 @@ def launch_setup(context, *args, **kwargs):
         imu_topic_effective = str(U['microstrain_imu_topic']).strip()
 
     lidar_cloud = str(U['lidar_cloud_topic']).strip()
-    # Local Livox or same topic over DDS when sensors run elsewhere.
     lidar_stamp_topic = (
         lidar_cloud
         if (ekf_use_lidar and lidar_cloud and (start_livox or not launch_sensors))
@@ -617,7 +520,6 @@ def launch_setup(context, *args, **kwargs):
         'use_stamp_dt': bool(U['ekf_use_stamp_dt']),
         'imu_source_id': ('microstrain' if use_microstrain_imu else 'livox'),
         'imu_source_topic': str(U['ekf_imu_source_topic']).strip(),
-        # Stamp sync (Microstrain vs Livox) + TF sample every cloud when NDT lags/skips.
         'lidar_cloud_stamp_topic': lidar_stamp_topic,
         'max_odom_tf_publish_rate_hz': float(U['ekf_max_odom_tf_publish_rate_hz']),
         'imu_stamp_offset_sec': float(U['ekf_imu_stamp_offset_sec']),
@@ -780,8 +682,6 @@ def launch_setup(context, *args, **kwargs):
         actions.append(microstrain_node)
     if publish_imu_mount_tf:
         actions.append(base_to_imu)
-    # Livox extrinsic static TF: always when local driver; when sensors off, publish from YAML if enabled
-    # (bag replay often has no ``base_link``→``livox_frame`` on /tf_static).
     if launch_sensors or ((not launch_sensors) and _robot_static_when_sensors_off):
         actions.append(base_to_livox)
     pub_livox_sensor_tf = bool(U.get('publish_livox_imu_sensor_frame_tf', True))
@@ -789,14 +689,12 @@ def launch_setup(context, *args, **kwargs):
         actions.append(livox_frame_to_imu_bridge)
     if imu_link_to_sensor_bridge is not None:
         actions.append(imu_link_to_sensor_bridge)
-    # EKF must publish odom->base_link before NDT uses it as scan_to_map initial guess (avoid first-cloud fallback).
     _ekf_delay = float(U.get('ekf_node_start_delay_sec', 0.0) or 0.0)
     if _ekf_delay > 0.0:
         actions.append(TimerAction(period=_ekf_delay, actions=[ekf_node]))
     else:
         actions.append(ekf_node)
 
-    # EMA low-pass: NDT publishes raw; this republishes smoothed to ``lidar_odom_topic`` for EKF/tools.
     _smooth_lidar = bool(U.get('lidar_odom_smooth_enable', False))
     if lidar_odom_node is not None and _smooth_lidar:
         _pub_lidar = str(U['lidar_odom_topic']).strip()
@@ -833,9 +731,6 @@ def launch_setup(context, *args, **kwargs):
 
     if use_lio:
         lio_sim = 'true' if use_sim_time else 'false'
-        # Bag replay only: merge fastlio_bag_replay_overlay (lidar_type 0) when ``use_sim_time`` is true.
-        # Do **not** merge on live ``launch_sensors:=false`` (Jetson + Livox on DDS) — that would override
-        # MID360 ``lidar_type: 4`` and break preprocessing (log shows ``p_pre->lidar_type 0``).
         _lio_bag_overlay = ''
         if use_sim_time:
             _lio_bag_overlay = str(
@@ -879,7 +774,6 @@ def launch_setup(context, *args, **kwargs):
                 ],
             )
         )
-        # Connect FAST-LIO world (camera_init/body) to robot odom so recorders can compose body->base_link.
         if use_lio and (not launch_sensors) and bool(U.get('lio_auto_tf_bridge', True)):
             actions.append(
                 IncludeLaunchDescription(

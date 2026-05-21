@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""
-Planar IMU + LiDAR EKF for ground robots.
 
-State (9): [px, py, z, yaw, vx, vy, bax, bay, bgz]
-  - Pose in world: (x, y, z); heading yaw (theta).
-  - Velocities vx, vy in world (for IMU propagation).
-  - Biases: horizontal accel biases bax, bay (body x/y), yaw-rate bias bgz.
-
-z is not integrated from IMU (LiDAR / z updates only). Roll and pitch are not
-estimated; output orientation uses roll=pitch=0, yaw from state.
-
-Assumes IMU linear acceleration is specific force including gravity; horizontal
-motion is obtained by rotating body (x,y) accel into the world frame at the
-current yaw. Small roll/pitch is assumed unless LiDAR corrects pose frequently.
-"""
 import numpy as np
 import math
 
@@ -23,10 +9,9 @@ def wrap_angle(a):
 
 
 class EKFPlanarIMU:
-    """Planar EKF with accel biases (bax, bay) and yaw gyro bias (bgz)."""
+
 
     DIM_X = 9
-    # Indices: px, py, z, yaw, vx, vy, bax, bay, bgz
     I_PX, I_PY, I_Z, I_YAW = 0, 1, 2, 3
     I_VX, I_VY = 4, 5
     I_BAX, I_BAY, I_BGZ = 6, 7, 8
@@ -49,11 +34,10 @@ class EKFPlanarIMU:
             self.P = np.diag(d)
 
         if process_noise_diag is None:
-            # Default Q scale per state (tuned for ~100 Hz IMU, indoor LiDAR correction)
             self.q_diag = np.array([
-                1e-4, 1e-4, 1e-6, 1e-6,  # px, py, z, yaw
-                5e-3, 5e-3,               # vx, vy
-                1e-8, 1e-8, 1e-10,        # bax, bay (m/s²), bgz (rad/s) random walk
+                1e-4, 1e-4, 1e-6, 1e-6,
+                5e-3, 5e-3,
+                1e-8, 1e-8, 1e-10,
             ], dtype=float)
         else:
             self.q_diag = np.asarray(process_noise_diag, dtype=float).reshape(-1)
@@ -62,8 +46,6 @@ class EKFPlanarIMU:
                     f"process_noise_diag must have length {self.dim_x}, got {self.q_diag.size}"
                 )
 
-        # If False: integrate yaw from gyro only; do not use body (ax,ay) for velocity/position.
-        # Reduces map skew when vertical shocks / tilt couple into horizontal accel (planar model).
         self.use_linear_accel = True
 
     def set_process_noise(self, process_noise_diag):
@@ -134,7 +116,6 @@ class EKFPlanarIMU:
             F[self.I_VY, self.I_BAX] = dt * (-s)
             F[self.I_VY, self.I_BAY] = dt * (-c)
         else:
-            # Constant-velocity coast in world frame; yaw from gyro; LiDAR corrects (x,y,yaw,vx,vy).
             vx_n = vx
             vy_n = vy
             px_n = px + vx * dt
@@ -172,7 +153,6 @@ class EKFPlanarIMU:
             raise NotImplementedError(
                 "Planar EKF does not fuse roll/pitch; set lidar_use_roll_pitch: false"
             )
-        # roll, pitch from LiDAR orientation are ignored here (xy, z, yaw only).
         z_meas = np.array([px, py, z, yaw])
         H = np.zeros((4, self.dim_x))
         H[0, self.I_PX] = 1
@@ -185,7 +165,7 @@ class EKFPlanarIMU:
         return self._update(z_meas, H, R, angle_idx=[3], gate_nis=gate_nis)
 
     def nis_lidar_xy(self, px, py, var=0.05):
-        """NIS for a hypothetical x,y position update only (no yaw)."""
+
         z_meas = np.array([float(px), float(py)], dtype=float)
         H = np.zeros((2, self.dim_x))
         H[0, self.I_PX] = 1.0
@@ -198,7 +178,7 @@ class EKFPlanarIMU:
         return float(y.T @ np.linalg.inv(S) @ y)
 
     def nis_lidar_xy_yaw(self, px, py, yaw, var=0.05, var_yaw=None):
-        """NIS for a hypothetical xy,yaw update at the current state (no state change)."""
+
         z_meas = np.array([float(px), float(py), float(yaw)], dtype=float)
         H = np.zeros((3, self.dim_x))
         H[0, self.I_PX] = 1.0
@@ -214,7 +194,7 @@ class EKFPlanarIMU:
         return float(y.T @ np.linalg.inv(S) @ y)
 
     def update_lidar_xy(self, px, py, var=0.05, gate_nis=None):
-        """Measurement update on x, y only (ignore LiDAR yaw — yaw stays IMU-predicted)."""
+
         z_meas = np.array([float(px), float(py)], dtype=float)
         H = np.zeros((2, self.dim_x))
         H[0, self.I_PX] = 1.0
@@ -226,7 +206,7 @@ class EKFPlanarIMU:
     def update_lidar_xy_yaw(
         self, px, py, yaw, var=0.05, var_yaw=None, gate_nis=None
     ):
-        """Measurement update on x, y, yaw only (planar LiDAR odom with no reliable z)."""
+
         z_meas = np.array([px, py, yaw])
         H = np.zeros((3, self.dim_x))
         H[0, self.I_PX] = 1
@@ -238,7 +218,7 @@ class EKFPlanarIMU:
         return self._update(z_meas, H, R, angle_idx=[2], gate_nis=gate_nis)
 
     def update_lidar_velocity_xy(self, vx, vy, var=0.25, gate_nis=None):
-        """Optional weak update on world-frame planar velocities (e.g. from NDT scan delta / dt)."""
+
         z_meas = np.array([float(vx), float(vy)], dtype=float)
         H = np.zeros((2, self.dim_x))
         H[0, self.I_VX] = 1.0
@@ -272,8 +252,6 @@ class EKFPlanarIMU:
                 y[i] = wrap_angle(y[i])
 
         S = H @ self.P @ H.T + R
-        # gate_nis=None skips NIS (used for LiDAR soft-pull retry). To use the filter default,
-        # pass self.nis_gate_default explicitly from the caller.
         if gate_nis is not None:
             nis = float(y.T @ np.linalg.inv(S) @ y)
             if nis > gate_nis:
@@ -299,13 +277,13 @@ class EKFPlanarIMU:
         return self.x.copy()
 
     def get_pose(self):
-        """Return position [px,py,pz] and euler [roll, pitch, yaw] (roll/pitch zero)."""
+
         pos = self.x[0:3].copy()
         rpy = np.array([0.0, 0.0, float(self.x[self.I_YAW])])
         return pos, rpy
 
     def get_biases(self):
-        """Accel biases (body x,y) and gyro bias (z), SI units."""
+
         return (
             float(self.x[self.I_BAX]),
             float(self.x[self.I_BAY]),
@@ -313,5 +291,4 @@ class EKFPlanarIMU:
         )
 
 
-# Backwards-compatible alias for older imports
 EKF_IMU_LIDAR = EKFPlanarIMU

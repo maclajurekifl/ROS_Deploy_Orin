@@ -1,4 +1,4 @@
-"""Planar SE(2) helpers for lightweight pose-graph residuals (numpy 3x3)."""
+
 from __future__ import annotations
 
 import math
@@ -24,12 +24,12 @@ def T_from_xyw(p: np.ndarray) -> np.ndarray:
 
 
 def odom_measurement(P: np.ndarray, i: int, j: int) -> np.ndarray:
-    """Relative transform T_i^{-1} T_j from current poses (3x3)."""
+
     return la.inv(T_from_xyw(P[i])) @ T_from_xyw(P[j])
 
 
 def residual_between(pred_t: np.ndarray, meas_t: np.ndarray) -> np.ndarray:
-    """Log-like error vector (3,) from pred and meas SE2 homogeneous (3x3)."""
+
     e = la.inv(meas_t) @ pred_t
     return np.array(
         [float(e[0, 2]), float(e[1, 2]), wrap_angle(math.atan2(float(e[1, 0]), float(e[0, 0])))],
@@ -38,7 +38,7 @@ def residual_between(pred_t: np.ndarray, meas_t: np.ndarray) -> np.ndarray:
 
 
 def transform_points_se2(T: np.ndarray, pts: np.ndarray) -> np.ndarray:
-    """Apply SE(2) in xy; z column unchanged (planar correction of map points)."""
+
     if pts.size == 0:
         return pts
     n = pts.shape[0]

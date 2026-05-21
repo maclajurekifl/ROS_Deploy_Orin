@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""
-Keyframe scan map: optional Livox per-point ``timestamp`` + IMU **3D** deskew in the **LiDAR**
-``header.frame_id`` (typically ``livox_frame``). External IMUs (e.g. Microstrain in ``imu_link``)
-must have angular velocity rotated into that frame via ``deskew_imu_rotate_gyro_to_frame`` / TF.
-then transform each cloud to `map`, keep scans that pass a distance/yaw/time keyframe rule,
-merge and voxel-downsample, publish a single PointCloud2.
 
-When ``use_lidar_odom_for_robot_pose`` is true, optional **approximate time sync** pairs each
-cloud with ``/lidar/odom`` so pose exists before insertion (see ``lidar_odom_approximate_sync``).
-
-Optional **simple loop closure** (`loop_closure_enable`) and optional **pose-graph map rebuild**
-(`apply_pose_graph_corrections`): when `/pose_graph/corrected_keyframes` matches this node's
-keyframe count, each stored map batch is transformed **T_new * inv(T_old)** per keyframe, poses
-and `/keyframe_map` are rebuilt, and `/keyframe_map/keyframes` republished (Option 1+2). Use
-`pose_graph_node` Option 3 (`publish_map_odom_tf`) only **without** map rebuild to avoid double
-correction — see README.
-"""
 from __future__ import annotations
 
 import math
@@ -41,15 +25,12 @@ from rclpy.time import Duration, Time
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32, Int32MultiArray, UInt32
 
-# Livox (and most rclcpp default publishers) use Reliable; sensor_data (Best Effort) will not match.
-# Small depth: long deskew callbacks + ApproximateTime sync must not backlog many seconds of clouds.
 _LIDAR_SUB_QOS = QoSProfile(
     depth=12,
     reliability=ReliabilityPolicy.RELIABLE,
     history=HistoryPolicy.KEEP_LAST,
     durability=DurabilityPolicy.VOLATILE,
 )
-# Match external IMU drivers (Microstrain, etc.): best-effort high rate.
 _IMU_DESKEW_QOS = QoSProfile(
     depth=200,
     reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -85,7 +66,7 @@ def transform_matrix_from_stamped(t: TransformStamped) -> np.ndarray:
 
 
 def pose_to_matrix4_from_odometry(odom: Odometry) -> np.ndarray:
-    """4x4: p_parent = T @ p_child (same convention as transform_matrix_from_stamped)."""
+
     p = odom.pose.pose.position
     q = odom.pose.pose.orientation
     m = quaternion_matrix([q.x, q.y, q.z, q.w])
@@ -96,7 +77,7 @@ def pose_to_matrix4_from_odometry(odom: Odometry) -> np.ndarray:
 
 
 def transform_points_xyz(pts: np.ndarray, m: np.ndarray) -> np.ndarray:
-    """pts (N,3), m 4x4 -> (N,3)"""
+
     if pts.size == 0:
         return pts
     n = pts.shape[0]
@@ -122,7 +103,7 @@ def voxel_downsample(points: np.ndarray, leaf: float) -> np.ndarray:
 def voxel_downsample_xyz_i(
     points: np.ndarray, intensity: np.ndarray, leaf: float
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Voxel-centroid xyz + per-voxel **max** intensity (newest keyframe index wins in cell)."""
+
     if points.size == 0 or leaf <= 0:
         return points, intensity
     p = points.astype(np.float64)
@@ -142,7 +123,7 @@ def voxel_downsample_xyz_i(
 
 
 def statistical_outlier_mask(points: np.ndarray, mean_k: int, std_mul: float) -> np.ndarray:
-    """Keep points with kNN mean distance <= mean + std_mul*std."""
+
     n = int(points.shape[0])
     if n < max(8, mean_k + 1) or mean_k < 2:
         return np.ones((n,), dtype=bool)
@@ -160,7 +141,7 @@ def statistical_outlier_mask(points: np.ndarray, mean_k: int, std_mul: float) ->
 
 
 def points_from_cloud2(msg: PointCloud2) -> Optional[np.ndarray]:
-    """Livox (and others) often use float32 x,y,z with padded point_step; read_points returns a structured array."""
+
     try:
         pts = list(
             point_cloud2.read_points(
@@ -196,7 +177,7 @@ def points_from_cloud2(msg: PointCloud2) -> Optional[np.ndarray]:
 def points_xyz_intensity_timestamp(
     msg: PointCloud2,
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
-    """Return xyz plus optional intensity and optional Livox timestamp fields."""
+
     names = [f.name for f in msg.fields]
     has_i = 'intensity' in names
     has_t = 'timestamp' in names
@@ -251,7 +232,7 @@ def deskew_points_to_scan_end_varying(
     sign: float = 1.0,
     model: str = 'rodrigues',
 ) -> np.ndarray:
-    """Deskew with per-row angular velocity ``omega`` (N,3) and ``dt_sec`` (N,) to scan end."""
+
     mdl = (model or 'rodrigues').strip().lower()
     if pts.size == 0:
         return pts
@@ -295,12 +276,7 @@ def deskew_points_to_scan_end(
     sign: float = 1.0,
     model: str = 'rodrigues',
 ) -> np.ndarray:
-    """Motion-compensate points in the **sensor** frame toward the end of the frame (Livox ``timestamp``).
 
-    Livox IMU gyro is in ``livox_frame``; points are in the same frame. Uses constant angular
-    velocity over the frame: **yaw_only** rotates x,y by ωz·dt; **rodrigues** applies the exact
-    rotation about axis ω̂ for angle ‖ω‖·dt per point (handles tilting / off-axis spins).
-    """
     mdl = (model or 'rodrigues').strip().lower()
     if pts.size == 0:
         return pts
@@ -310,7 +286,6 @@ def deskew_points_to_scan_end(
     mx = float(np.max(ts))
     if not math.isfinite(mx):
         return pts
-    # Livox driver stores offset_time as double (typically ns from frame start).
     scale = 1e-9 if mx > 1e4 else 1.0
     dt_sec = (mx - ts) * scale
 
@@ -353,7 +328,7 @@ def livox_point_times_abs_ns(
     *,
     cloud_stamp_offset_sec: float,
 ) -> Optional[np.ndarray]:
-    """Per-point absolute time (ns) aligned with ``header.stamp`` sweep end + offset."""
+
     if int(header_stamp.sec) == 0 and int(header_stamp.nanosec) == 0:
         return None
     t_end = Time.from_msg(header_stamp) + Duration(seconds=float(cloud_stamp_offset_sec))
@@ -372,7 +347,7 @@ def livox_point_times_abs_ns(
 def interp_gyro_batch(
     t_query_ns: np.ndarray, times_ns: np.ndarray, w: np.ndarray
 ) -> np.ndarray:
-    """Linear interpolation of angular velocity (N,3) at query times (N,) from (M,) / (M,3)."""
+
     m = int(times_ns.shape[0])
     n = int(t_query_ns.shape[0])
     idx = np.searchsorted(times_ns, t_query_ns, side='right')
@@ -392,7 +367,7 @@ def numpy_xyz_to_pointcloud2(
     *,
     intensity: Optional[np.ndarray] = None,
 ) -> PointCloud2:
-    """If ``intensity`` is set (length N), adds ``intensity`` field for RViz rainbow (FAST-LIO style)."""
+
     msg = PointCloud2()
     msg.header.stamp = stamp
     msg.header.frame_id = header_frame
@@ -438,7 +413,7 @@ def overlap_ratio(
     rng: np.random.Generator,
     max_b_pts: int = 3500,
 ) -> float:
-    """Fraction of subsampled points in a with a neighbor in b within match_m (both map frame)."""
+
     if pts_a.shape[0] < 20 or pts_b.shape[0] < 20:
         return 0.0
     n = min(n_samples, pts_a.shape[0])
@@ -449,7 +424,6 @@ def overlap_ratio(
         b_sub = pts_b[idx_b].astype(np.float64)
     else:
         b_sub = pts_b.astype(np.float64)
-    # (n, 1, 3) - (1, M, 3) -> (n, M) distances
     diff = a_sub[:, np.newaxis, :] - b_sub[np.newaxis, :, :]
     d2 = np.sum(diff * diff, axis=2)
     d_min = np.sqrt(np.min(d2, axis=1))
@@ -457,7 +431,7 @@ def overlap_ratio(
 
 
 def _rotation_matrix_from_axis_angle(axis: np.ndarray, angle: float) -> np.ndarray:
-    """Rodrigues formula for a 3x3 rotation matrix."""
+
     ax = np.asarray(axis, dtype=np.float64).reshape(3)
     n = float(np.linalg.norm(ax))
     if n < 1e-12 or abs(angle) < 1e-12:
@@ -511,22 +485,15 @@ class KeyframeMapNode(Node):
             'pose_graph_corrected_path_topic', '/pose_graph/corrected_keyframes'
         )
         self.declare_parameter('map_batch_store_voxel_m', 0.32)
-        # Min wall time between full /keyframe_map publishes (map still merges every keyframe).
         self.declare_parameter('map_publish_min_interval_sec', 0.0)
-        # Skip first N point clouds before any keyframe (TF/LIO/FAST-LIO IMU init — avoids ghost first scan).
         self.declare_parameter('warmup_clouds_to_skip', 0)
-        # If false, skip keyframe when TF at cloud stamp is missing (avoids livox vs pose mismatch).
         self.declare_parameter('tf_allow_latest_fallback', True)
-        # Use /lidar/odom (or NDT/LIO topic) for T_odom<-base at cloud time; only TF for map<-odom
-        # and base<-livox extrinsic. Avoids EKF lag / sparse odom TF at scan insertion.
         self.declare_parameter('use_lidar_odom_for_robot_pose', False)
         self.declare_parameter('lidar_odom_topic', '/lidar/odom')
         self.declare_parameter('lidar_odom_max_age_sec', 0.15)
-        # Pair cloud + /lidar/odom by stamp (avoids processing cloud before matching odom arrives).
         self.declare_parameter('lidar_odom_approximate_sync', True)
         self.declare_parameter('lidar_odom_approx_sync_slop_sec', 0.08)
         self.declare_parameter('lidar_odom_approx_sync_queue_size', 10)
-        # Prefilter in sensor frame to remove self-hits / distant clutter before map insertion.
         self.declare_parameter('prefilter_min_range_m', 0.5)
         self.declare_parameter('prefilter_max_range_m', 20.0)
         self.declare_parameter('prefilter_self_radius_m', 0.5)
@@ -543,30 +510,21 @@ class KeyframeMapNode(Node):
         self.declare_parameter('prefilter_sor_mean_k', 20)
         self.declare_parameter('prefilter_sor_stddev_mul', 1.0)
         self.declare_parameter('prefilter_sor_max_points', 4500)
-        # Skip deskew update when gyro norm is implausibly large (protect against spikes).
         self.declare_parameter('deskew_max_gyro_norm_rad_s', 5.0)
-        # If strict TF (above false), still use latest TF when stamp is slightly ahead of the buffer
-        # (Livox cloud time vs EKF publish order — avoids dropped keyframes / map tearing).
         self.declare_parameter('tf_future_extrapolation_use_latest', True)
         self.declare_parameter('tf_lookup_timeout_sec', 0.55)
         self.declare_parameter('tf_buffer_cache_sec', 180.0)
-        # Livox per-point ``timestamp`` + IMU yaw-rate deskew (reduces smear when rotating).
         self.declare_parameter('deskew_enable', True)
         self.declare_parameter('deskew_imu_topic', '/livox/imu')
         self.declare_parameter('deskew_max_imu_age_sec', 0.12)
-        # rodrigues: full 3D gyro deskew (handheld / tilted spin); yaw_only: ωz on x,y only.
         self.declare_parameter('deskew_model', 'rodrigues')
-        # If map shears the wrong way vs rotation, try -1.0 (sensor/driver convention).
         self.declare_parameter('deskew_imu_sign', 1.0)
-        # Tighter keyframe spacing while ‖ω‖ is high (more overlap during fast motion).
         self.declare_parameter('rotation_adaptive_keyframes', True)
         self.declare_parameter('rotation_gyro_z_thresh_rad_s', 0.45)
         self.declare_parameter('rotation_keyframe_scale', 0.5)
-        # Optional safety gate: drop clouds that imply impossible pose jumps vs last keyframe.
         self.declare_parameter('reject_unstable_frame_enable', False)
         self.declare_parameter('reject_unstable_frame_max_translation_m', 1.0)
         self.declare_parameter('reject_unstable_frame_max_yaw_deg', 45.0)
-        # Auto-level map from dominant horizontal plane (floor or ceiling), applied once.
         self.declare_parameter('auto_level_enable', True)
         self.declare_parameter('auto_level_min_keyframes', 8)
         self.declare_parameter('auto_level_min_points', 1500)
@@ -574,20 +532,13 @@ class KeyframeMapNode(Node):
         self.declare_parameter('auto_level_ransac_iters', 140)
         self.declare_parameter('auto_level_plane_dist_thresh_m', 0.08)
         self.declare_parameter('auto_level_max_tilt_deg', 35.0)
-        # Clock sync: add to IMU / cloud stamps so external IMU + Livox LiDAR share one timeline.
         self.declare_parameter('deskew_imu_stamp_offset_sec', 0.0)
         self.declare_parameter('deskew_cloud_stamp_offset_sec', 0.0)
         self.declare_parameter('deskew_imu_buffer_max_samples', 512)
         self.declare_parameter('deskew_imu_interpolate', True)
-        # If varying-gyro deskew fails, average IMU in buffer over each point's time span (rotation).
         self.declare_parameter('deskew_mean_gyro_fallback', True)
-        # If set (e.g. livox_frame): rotate Imu.angular_velocity from header.frame_id into this
-        # frame before deskew. Required when deskew uses Microstrain (imu_link) but points are in livox_frame.
         self.declare_parameter('deskew_imu_rotate_gyro_to_frame', '')
         self.declare_parameter('deskew_imu_rotation_tf_timeout_sec', 0.08)
-        # Livox /livox/imu often uses header ``sensor`` (MID360). That is NOT the same frame as
-        # Microstrain ``/imu/data`` ``sensor``; do not TF-rotate Livox gyro via the GX5 tree.
-        # When true and deskew IMU is ``/livox/imu``, treat ``sensor`` as already in the rotate target basis.
         self.declare_parameter('deskew_livox_imu_sensor_as_cloud_identity', True)
 
         self._cloud_topic = self.get_parameter('cloud_topic').value
@@ -690,7 +641,6 @@ class KeyframeMapNode(Node):
         self._deskew_model = _dm if _dm else 'rodrigues'
         self._deskew_sign = float(self.get_parameter('deskew_imu_sign').value)
         self._rot_adapt = bool(self.get_parameter('rotation_adaptive_keyframes').value)
-        # Threshold on ‖ω‖ (rad/s), not only ωz — handheld rotation is rarely pure z.
         self._rot_gyro_thresh = float(
             self.get_parameter('rotation_gyro_z_thresh_rad_s').value
         )
@@ -760,8 +710,8 @@ class KeyframeMapNode(Node):
         self._tf_listener = TransformListener(self._tf_buffer, self)
 
         self._last_imu_w = np.zeros(3, dtype=np.float64)
-        self._last_imu_recv = None  # rclpy.time.Time (receive time; wall-clock fallback only)
-        self._last_imu_msg_stamp = None  # IMU time (offset) for deskew gate vs cloud
+        self._last_imu_recv = None
+        self._last_imu_msg_stamp = None
 
         if self._use_lidar_odom_sync:
             sub_cloud = message_filters.Subscriber(
@@ -815,7 +765,6 @@ class KeyframeMapNode(Node):
             )
 
         self._map_pts: Optional[np.ndarray] = None
-        # Per-point RViz intensity: keyframe index (newer = higher); cleared on pose-graph rebuild.
         self._map_intensity: Optional[np.ndarray] = None
         self._kf_poses: List[Tuple[float, float, float]] = []
         self._kf_scan_store: List[np.ndarray] = []
@@ -826,7 +775,6 @@ class KeyframeMapNode(Node):
         self._rng = np.random.default_rng(seed=42)
         self._last_loop_pub_ns = 0
         self._auto_level_done = False
-        # Persistent map-level correction (roll/pitch) applied to all future inserts/poses.
         self._level_R = np.eye(3, dtype=np.float64)
         self._last_pg_applied: Optional[np.ndarray] = None
         self._pg_path_pending: Optional[Path] = None
@@ -942,12 +890,11 @@ class KeyframeMapNode(Node):
         times = np.array([r[0] for r in self._imu_buf], dtype=np.int64)
         w = np.array([[r[1], r[2], r[3]] for r in self._imu_buf], dtype=np.float64)
         t_lo, t_hi = int(times[0]), int(times[-1])
-        # Clamp query times to buffered span so fast spins still get interp (edges use endpoint ω).
         tq = np.clip(t_ns.astype(np.int64), t_lo, t_hi)
         return interp_gyro_batch(tq, times, w)
 
     def _gyro_mean_for_timespan(self, t_lo_ns: int, t_hi_ns: int) -> Optional[np.ndarray]:
-        """Mean angular velocity over IMU samples in [t_lo, t_hi] (with margin) — stable under spin."""
+
         if len(self._imu_buf) < 1:
             return None
         lo = min(t_lo_ns, t_hi_ns) - int(80e6)
@@ -968,14 +915,13 @@ class KeyframeMapNode(Node):
     def _angular_velocity_to_deskew_frame(
         self, msg: Imu, wx: float, wy: float, wz: float
     ) -> Tuple[float, float, float]:
-        """Express angular velocity in ``deskew_imu_rotate_gyro_to_frame`` (LiDAR frame)."""
+
         tgt = self._deskew_rotate_gyro_to
         if not tgt:
             return wx, wy, wz
         imu_frame = (msg.header.frame_id or '').strip()
         if not imu_frame or imu_frame == tgt:
             return wx, wy, wz
-        # Avoid using global TF frame ``sensor`` (Microstrain) to rotate Livox chip gyro.
         _imu_t = (self._deskew_imu_topic or '').strip()
         livox_imu_topic = _imu_t == '/livox/imu' or _imu_t.endswith('/livox/imu')
         if (
@@ -1029,25 +975,19 @@ class KeyframeMapNode(Node):
             self._imu_buf.append((int(t.nanoseconds), wx, wy, wz))
 
     def _deskew_imu_fresh_wall(self) -> bool:
-        """Legacy gate: IMU arrived recently in wall time (cloud stamp missing or broken)."""
+
         if self._last_imu_recv is None:
             return False
         dt = (self.get_clock().now() - self._last_imu_recv).nanoseconds * 1e-9
         return dt <= self._deskew_max_imu_age
 
     def _deskew_imu_usable_for_cloud(self, cloud_time: Time) -> bool:
-        """Gate deskew on IMU vs *cloud* time alignment, not processing latency.
 
-        Using only wall-clock ``now()`` caused deskew to be skipped whenever the cloud
-        callback ran slightly late → motion-smearing persisted while rotating even though
-        gyro was valid at capture time.
-        """
         if self._last_imu_msg_stamp is None:
             return self._deskew_imu_fresh_wall()
         if cloud_time.nanoseconds == 0:
             return self._deskew_imu_fresh_wall()
         dt = abs((cloud_time.nanoseconds - self._last_imu_msg_stamp.nanoseconds) * 1e-9)
-        # One Livox frame ~100 ms; allow IMU stamp slightly before/after cloud stamp.
         slack = max(float(self._deskew_max_imu_age), 0.12) + 0.1
         return dt <= slack
 
@@ -1082,7 +1022,6 @@ class KeyframeMapNode(Node):
         intensity = intensity[mask] if intensity is not None else None
         ts = ts[mask] if ts is not None else None
         if self._pf_sor_en and xyz.shape[0] > max(8, self._pf_sor_k + 1):
-            # Avoid O(N^2) distance matrix explosions on dense scans (process subset only).
             if self._pf_sor_max_pts > 0 and xyz.shape[0] > self._pf_sor_max_pts:
                 pick = self._rng.choice(xyz.shape[0], size=self._pf_sor_max_pts, replace=False)
                 x_sub = xyz[pick]
@@ -1228,7 +1167,7 @@ class KeyframeMapNode(Node):
     def _lookup_transform_stamped(
         self, target_frame: str, source_frame: str, stamp: Time
     ) -> Optional[TransformStamped]:
-        """Return transform target_frame <- source_frame at ``stamp``, with optional fallbacks."""
+
         tf_timeout = Duration(seconds=max(0.05, self._tf_timeout))
         la = f'{source_frame} -> {target_frame}'
         try:
@@ -1453,7 +1392,6 @@ class KeyframeMapNode(Node):
         best_i = -1
         best_score = 0.0
 
-        # Past keyframe index i with (new_idx - i) >= loop_min_index_gap (not recent chain).
         for i in range(0, new_idx - self._loop_min_gap + 1):
             if i >= len(self._kf_scan_store):
                 break
@@ -1517,13 +1455,7 @@ class KeyframeMapNode(Node):
         return np.array(rows, dtype=np.float64)
 
     def _rebuild_merged_map_from_batches(self) -> None:
-        """Voxel-merge ``_kf_map_batches`` into ``_map_pts`` (pose-graph mode only).
 
-        When pose-graph corrections are enabled, the published map must come **only** from
-        stored keyframe batches so it stays consistent with warped geometry. Incrementally
-        stacking full-resolution ``pts_map`` duplicates points vs batch-based merges and
-        produces layered walls.
-        """
         if not self._kf_map_batches:
             self._map_pts = None
             self._map_intensity = None
@@ -1549,7 +1481,7 @@ class KeyframeMapNode(Node):
             )
 
     def _apply_pose_graph_path_msg(self, msg: Path) -> None:
-        """Apply corrected poses to batches and republish map (all lengths must match)."""
+
         n = len(self._kf_poses)
         if (
             n < 2
@@ -1605,7 +1537,7 @@ class KeyframeMapNode(Node):
         )
 
     def _try_apply_pending_pose_graph(self) -> None:
-        """Apply stashed /pose_graph/corrected_keyframes once keyframe count catches up."""
+
         if not self._apply_pg or self._pg_path_pending is None:
             return
         msg = self._pg_path_pending

@@ -1,4 +1,3 @@
-# F1 — heavy smoothing (target: lower path-length ratio / less sawtooth; more lag vs FAST-LIO)
 slam_bringup:
   lidar_odom_smooth_enable: true
   lidar_odom_smooth_mode: full

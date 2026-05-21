@@ -1,9 +1,2 @@
-# EMA C1 — bag replay: more XY/Z smoothing with yaw still pass-through (slam_bringup xyz mode).
-# Baseline lidar_odom_smooth_alpha_pose 0.10 → 0.08 (requires lidar_odom_smooth_mode: xyz in base YAML).
-#
-# Terminal 1:
-#   export OVR=$(ros2 pkg prefix ros_project_bringup)/share/ros_project_bringup/config/overlay_ema_C1_alpha_pose_0p08.yaml
-#   ros2 launch ros_project_bringup launch_slam.launch.py launch_sensors:=false bringup_config:=$OVR
-# Terminal 5: --out-dir /tmp/bench_50s_lockwin_ema_C1_alpha
 slam_bringup:
   lidar_odom_smooth_alpha_pose: 0.08

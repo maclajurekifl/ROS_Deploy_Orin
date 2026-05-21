@@ -1,10 +1,2 @@
-# NDT experiment E3 — bag replay / laptop: one knob vs current slam_bringup.yaml.
-# Baseline lidar_max_fitness_score 7.0 → 5.5 (reject worse registrations; may drop scans if too tight).
-#
-# Terminal 1:
-#   export OVR=$(ros2 pkg prefix ros_project_bringup)/share/ros_project_bringup/config/overlay_ndt_E3_fitness_tighter.yaml
-#   ros2 launch ros_project_bringup launch_slam.launch.py launch_sensors:=false bringup_config:=$OVR
-#
-# Terminal 5: use --out-dir /tmp/bench_50s_lockwin_ndt_E3_fitness (same REC_* as prior benches).
 slam_bringup:
   lidar_max_fitness_score: 5.5

@@ -1,5 +1,4 @@
 slam_bringup:
-  # A) Baseline (current)
   lidar_voxel_leaf_size: 0.28
   lidar_ndt_step_size: 0.075
   lidar_ndt_max_iterations: 40

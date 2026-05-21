@@ -1,35 +1,24 @@
-# ekf_node — GX5 + LiDAR (see docs/tuning.md §3). Knobs = process_noise_diag only.
 ekf_node:
   ros__parameters:
-    # Overridden by launch_slam (default true). Bag replay needs true + `ros2 bag play --clock`.
     use_sim_time: true
-    # =========================================================================
-    # KNOBS — only parameters listed in docs/tuning.md §3
-    # =========================================================================
 
     process_noise_diag:
-      - 2.5e-4   # px
-      - 2.5e-4   # py
-      - 1.0e-6   # z
+      - 2.5e-4
+      - 2.5e-4
+      - 1.0e-6
       - 2.0e-7   # yaw (slightly lower Q → slower covariance growth between LiDAR updates)
-      - 5.0e-3   # vx
-      - 5.0e-3   # vy
-      - 1.0e-8   # bax
-      - 1.0e-8   # bay
-      # Gyro bias random walk (rad/s)^2 * dt; was too small → bgz barely learned from yaw meas.
-      - 2.0e-9   # bgz
+      - 5.0e-3
+      - 5.0e-3
+      - 1.0e-8
+      - 1.0e-8
+      - 2.0e-9
 
-    # =========================================================================
-    # REST (frames, topics, LiDAR R, P0 — launch + slam_bringup override much of this)
-    # =========================================================================
 
     imu_topic: /imu/data
-    # false: yaw from gyro; horizontal motion from LiDAR (accel in planar model skews with tilt/shock).
     predict_use_linear_accel: false
     nominal_dt: 0.025
     use_stamp_dt: true
     imu_stamp_offset_sec: 0.0
-    # Subtracted from ωz after TF to base_link (see ekf_node). Set ≈ stationary mean to remove bias drift.
     imu_gyro_z_bias_rad_s: 0.0
     imu_auto_gyro_z_bias_enable: false
     imu_auto_gyro_z_bias_tune_sec: 4.0
@@ -54,7 +43,7 @@ ekf_node:
       - 0.5
       - 0.01
       - 0.01
-      - 1.0e-3   # bgz — allow faster initial bias learn (tighten after calibration)
+      - 1.0e-3
 
     flat_orientation_variance: 1.0e-4
 
@@ -63,7 +52,6 @@ ekf_node:
     path_topic: /ekf/path
 
     lidar_odom_topic: "/lidar/odom"
-    # Optional TwistStamped planar delta (same as lidar_odometry delta_topic); launch sets from slam_bringup.
     lidar_delta_topic: ""
     lidar_delta_vel_var: 0.22
     lidar_delta_gate_nis: 200.0
@@ -77,7 +65,6 @@ ekf_node:
     lidar_fuse_z_from_odom: false
     lidar_gate_nis: 32.0
     lidar_use_roll_pitch: false
-    # Launch overrides from slam_bringup; defaults match ekf_node.
     lidar_fusion_debug_log: false
     lidar_fusion_debug_throttle_sec: 1.0
     lidar_soft_fuse_after_gate_reject: true

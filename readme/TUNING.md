@@ -1,6 +1,6 @@
 # SLAM stack tuning notes (EKF, Microstrain, Livox, keyframe map)
 
-For **problem/solution narratives** (e.g. `use_microstrain_imu`, install vs `src` YAML, `/ekf/odom` stamps, NDT TF at cloud time), see **`documentation/issues-and-solutions-summary.md`**.
+Primary config: **`src/ros_project_bringup/config/slam_bringup.yaml`**. Optional overlay: launch arg **`bringup_config:=/path/to.yaml`** or env **`ROS_PROJECT_SLAM_CONFIG`**.
 
 ## Livox `frame_id` and deskew gyro rotation
 

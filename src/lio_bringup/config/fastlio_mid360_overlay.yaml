@@ -1,24 +1,19 @@
-# FAST-LIO overrides (merged after mid360.yaml). Knobs = docs/tuning.md §10.
 /**:
   ros__parameters:
     publish_tf: false
 
     preprocess:
-      # --- knobs (tuning.md §10) ---
       blind: 0.55
-      # --- rest ---
       lidar_type: 4
       scan_line: 4
       timestamp_unit: 3
       scan_rate: 10
 
     mapping:
-      # --- knobs (tuning.md §10) ---
       acc_cov: 0.15
       gyr_cov: 0.15
       det_range: 55.0
       extrinsic_est_en: true
-      # --- rest ---
       b_acc_cov: 0.0002
       b_gyr_cov: 0.0002
       fov_degree: 360.0

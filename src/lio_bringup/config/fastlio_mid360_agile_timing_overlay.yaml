@@ -1,6 +1,3 @@
-# FAST-LIO agile timing isolation overlay:
-# - enforce single IMU source from Livox hardware sync domain
-# - start with zero lidar<->imu offset for clean baseline
 /**:
   ros__parameters:
     common:
@@ -17,7 +14,6 @@
       scan_rate: 10
 
     mapping:
-      # Increase IMU noise to reduce over-trust during aggressive motion.
       acc_cov: 0.5
       gyr_cov: 0.2
       det_range: 55.0
@@ -25,7 +21,6 @@
       b_acc_cov: 0.001
       b_gyr_cov: 0.001
       fov_degree: 360.0
-      # Frame-alignment fix: 180 deg yaw rotation about +Z.
       extrinsic_T: [0.0, 0.0, 0.0]
       extrinsic_R: [-1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 1.0]
 

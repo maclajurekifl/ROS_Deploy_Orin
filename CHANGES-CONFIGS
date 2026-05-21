@@ -137,7 +137,7 @@ Touched **intro** (was “dict at top of launch file”), **ekf/imu_source**, **
 | File | What changed |
 |------|----------------|
 | **`README.md`** | §1.2 “Where to tune”, §1.3 Microstrain example, **new §7.0** (full-stack bringup table), **§7.2** NDT row, **§8.1** merge wording — search **`slam_bringup`**. |
-| **`deployment.md`** | All **`USER_LAUNCH_CONFIG`** → bringup / **`slam_bringup.yaml`** (several lines). |
+| **`readme/deployment.md`** | All **`USER_LAUNCH_CONFIG`** → bringup / **`slam_bringup.yaml`** (several lines). |
 | **`readme/TUNING.md`** | Two references: extrinsics + global bringup. |
 | **`documentation/issues-and-solutions-summary.md`** | bringup / **`slam_bringup.yaml`** in a few table rows and mitigations. |
 

@@ -1,8 +1,0 @@
-flowchart TD
-  A[slam_bringup.yaml defaults] --> B[bringup_config overlay YAML]
-  B --> C[launch arguments]
-  C --> D[launch_slam.launch.py merged dict]
-  D --> E1[ekf_node parameters]
-  D --> E2[lidar_odometry parameters]
-  D --> E3[keyframe_map/pose_graph parameters]
-  D --> E4[driver + static TF parameters]

@@ -34,8 +34,6 @@ from tf_transformations import euler_from_quaternion, quaternion_from_euler
 
 from localisation_ekf.ekf_filter import EKFPlanarIMU, wrap_angle
 
-# Microstrain (and many IMU drivers) publish sensor_msgs/Imu with best-effort QoS.
-# Default rclpy subscription is reliable — no IMU callbacks → EKF looks LiDAR-only.
 _IMU_SUB_QOS = QoSProfile(
     depth=200,
     reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -48,9 +46,6 @@ class EKFNode(Node):
     def __init__(self):
         super().__init__("ekf_node")
 
-        # --------------------
-        # Parameters
-        # --------------------
         self.declare_parameter("imu_topic", "/livox/imu")
         self.declare_parameter("publish_topic", "/ekf/odom")
         self.declare_parameter("pose_topic", "/ekf/pose")
@@ -58,27 +53,19 @@ class EKFNode(Node):
 
         self.declare_parameter("nominal_dt", 0.01)
         self.declare_parameter("use_stamp_dt", True)
-        # False: yaw from gyro only; do not integrate body (ax,ay) into velocity (see EKFPlanarIMU).
         self.declare_parameter("predict_use_linear_accel", True)
 
-        # TF / odometry parent frame (ROS convention: odom -> base_link)
         self.declare_parameter("odom_frame", "odom")
-        # Legacy: was used as odometry parent; ignored if set (use odom_frame + map->odom TF)
         self.declare_parameter("world_frame", "")
 
         self.declare_parameter("base_link_frame", "base_link")
         self.declare_parameter("publish_tf", True)
-        # Optional: stamp /ekf/odom + TF with ROS time (usually leave false so TF matches
-        # sensor-timed PointCloud2; pose_graph can stamp map→odom from /ekf/odom instead).
         self.declare_parameter("publish_use_ros_time_in_headers", False)
-        # Rotate IMU linear_accel + angular_velocity into base_link when header.frame_id differs
         self.declare_parameter("transform_imu_to_base_link", True)
         self.declare_parameter("imu_tf_lookup_timeout_sec", 0.05)
-        # Latched std_msgs/String: which IMU hardware the stack was configured for (livox | microstrain)
         self.declare_parameter("imu_source_topic", "/ekf/imu_source")
         self.declare_parameter("imu_source_id", "livox")
 
-        # Planar EKF noise (state order: px,py,z,yaw,vx,vy,bax,bay,bgz)
         self.declare_parameter(
             "process_noise_diag",
             [
@@ -95,59 +82,35 @@ class EKFNode(Node):
         )
         self.declare_parameter("initial_cov_diag", [0.5] * 9)
 
-        # Uncertainty on unobserved roll/pitch (rad^2) in published odometry
         self.declare_parameter("flat_orientation_variance", 1e-4)
 
-        # Optional LiDAR fusion inputs
         self.declare_parameter("lidar_odom_topic", "")
         self.declare_parameter("lidar_pose_topic", "")
         self.declare_parameter("lidar_z_topic", "")
         self.declare_parameter("lidar_pose_var", 0.05)
-        # Often tighten yaw vs x,y,z so LiDAR corrects heading drift strongly
         self.declare_parameter("lidar_yaw_var", 0.02)
         self.declare_parameter("lidar_z_var", 0.05)
         self.declare_parameter("lidar_require_frames", True)
-        # If false: fuse only x,y,yaw from LiDAR odom (z from /lidar/z or IMU hold)
         self.declare_parameter("lidar_fuse_z_from_odom", False)
-        # If true (planar path only): fuse only x,y from LiDAR; yaw from IMU integration only.
-        # Use when LiDAR/NDT heading is untrustworthy but position is good — fix IMU mount if yaw still wrong.
         self.declare_parameter("lidar_fuse_xy_only", False)
         self.declare_parameter("lidar_use_roll_pitch", False)
         self.declare_parameter("lidar_gate_nis", 16.0)
-        # If set (e.g. /livox/lidar), stamp /ekf/odom + TF from this cloud header when not
-        # fusing LiDAR odom — aligns TF with Livox time when IMU uses a different clock (Microstrain).
         self.declare_parameter("lidar_cloud_stamp_topic", "")
-        # Limit /ekf/odom + TF rate during IMU-only coast (0 = unlimited). LiDAR/cloud publishes ignore this.
         self.declare_parameter("max_odom_tf_publish_rate_hz", 25.0)
-        # Add to sensor header stamps so IMU + LiDAR share one timeline (fixed clock skew vs Livox).
         self.declare_parameter("imu_stamp_offset_sec", 0.0)
         self.declare_parameter("lidar_stamp_offset_sec", 0.0)
-        # Subtracted from ωz (rad/s) after TF to base_link, before EKF predict. At rest, set ≈ mean(ωz)
-        # on /imu/data (e.g. -0.012 if the GX5 reads -0.012 stationary) to kill pure bias integration drift.
         self.declare_parameter("imu_gyro_z_bias_rad_s", 0.0)
-        # First tune_sec of IMU time: average ωz (after TF); then subtract that mean + manual bias. Use when
-        # bag starts stationary (robot still); set manual to 0 to avoid double correction.
         self.declare_parameter("imu_auto_gyro_z_bias_enable", False)
         self.declare_parameter("imu_auto_gyro_z_bias_tune_sec", 4.0)
-        # Applied after bias subtraction (try -1.0 if yaw runs opposite to truth / TF sign error).
         self.declare_parameter("imu_gyro_z_scale", 1.0)
-        # Added to published yaw only (odom/pose/path/TF); does not change LiDAR fusion or internal state.
         self.declare_parameter("publish_base_link_yaw_offset_deg", 0.0)
-        # Optional: fuse planar scan delta (TwistStamped linear.x/y = dx,dy in odom; dz unused)
-        # into vx, vy between full LiDAR pose updates (gyro-only translation mode).
         self.declare_parameter("lidar_delta_topic", "")
         self.declare_parameter("lidar_delta_vel_var", 0.22)
         self.declare_parameter("lidar_delta_gate_nis", 200.0)
         self.declare_parameter("lidar_delta_nominal_dt_sec", 0.1)
-        # Verbose LiDAR fusion line (throttled): NIS, innovations, applied flags.
         self.declare_parameter("lidar_fusion_debug_log", False)
         self.declare_parameter("lidar_fusion_debug_throttle_sec", 1.0)
-        # After gated xy,yaw reject (NDT path), run one soft ungated update (large R). Default
-        # true: avoids gyro-only coast when NIS fails on yaw but |Δxy| is small.
         self.declare_parameter("lidar_soft_fuse_after_gate_reject", True)
-        # Planar speed from /lidar/odom twist.linear (or EKF vx,vy when absent): below this threshold,
-        # multiply lidar_pose_var (+ yaw var when fused) by lidar_pose_var_below_slow_speed_scale so
-        # scan-matching jitter while stopped/slow does not yank the EKF (LIO/NDT noise at v≈0).
         self.declare_parameter("lidar_fuse_slow_linear_speed_m_s", 0.0)
         self.declare_parameter("lidar_pose_var_below_slow_speed_scale", 25.0)
 
@@ -215,8 +178,6 @@ class EKFNode(Node):
         self._lidar_slow_var_scale = max(
             1.0, float(self.get_parameter("lidar_pose_var_below_slow_speed_scale").value)
         )
-        # Throttle state only; re-read lidar_fusion_debug_log each callback so
-        # ``ros2 param set`` works without restart.
         self._lidar_fusion_debug_last_t = None
 
         self._imu_auto_bias_enable = bool(
@@ -227,7 +188,7 @@ class EKFNode(Node):
         )
         self._imu_auto_z_samples: list = []
         self._imu_auto_t0_msg = None
-        self._imu_auto_mean = None  # frozen mean, rad/s
+        self._imu_auto_mean = None
         self._imu_auto_warned_no_samples = False
 
         self._lidar_cloud_stamp = None
@@ -273,9 +234,6 @@ class EKFNode(Node):
             )
             self.lidar_fuse_xy_only = False
 
-        # --------------------
-        # EKF
-        # --------------------
         self.ekf = EKFPlanarIMU(
             dt=self.nominal_dt,
             process_noise_diag=np.array(q_list, dtype=float),
@@ -286,23 +244,16 @@ class EKFNode(Node):
             self.get_parameter("predict_use_linear_accel").value
         )
         self.last_imu_stamp = None
-        # ``odom``→``base_link`` TF uses **node clock time** (not odometry header time) so tf2 never sees
-        # out-of-order transforms during bag replay (LiDAR/IMU stamps vs /clock). /ekf/odom headers unchanged.
         self._last_tf_pub_stamp_msg = None
         self._warned_lidar_odom_parent = False
         self._warned_lidar_odom_child = False
         self._warned_imu_tf = False
-        # If LiDAR odom is NIS-rejected while EKF is near origin, snap once (gyro-only + tight R).
         self._lidar_bootstrap_done = False
-        # Further snaps when LiDAR xy disagrees strongly with EKF (rejects / yaw–xy coupling).
         self._lidar_snap_remaining = 5
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # --------------------
-        # Publishers
-        # --------------------
         self.pub_odom = self.create_publisher(Odometry, self.pub_topic, 10)
         self.pub_pose = self.create_publisher(PoseStamped, self.pose_topic, 10)
         self.pub_path = self.create_publisher(Path, self.path_topic, 10)
@@ -327,16 +278,8 @@ class EKFNode(Node):
         self.ekf_path = Path()
         self.ekf_path.header.frame_id = self.odom_frame
 
-        # --------------------
-        # TF Broadcaster
-        # --------------------
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        # --------------------
-        # Subscribers
-        # --------------------
-        # Cloud stamp first: publish odom→base_link at each cloud time before other callbacks in the
-        # same executor tick where possible (helps tf2 vs NDT scan time).
         if self._lidar_cloud_stamp_topic:
             self.create_subscription(
                 PointCloud2,
@@ -445,12 +388,8 @@ class EKFNode(Node):
             return
         eff_s = self._stamp_add_sec(s, self._lidar_stamp_offset_sec)
         self._lidar_cloud_stamp = eff_s
-        # NDT can skip or lag vs Livox; RViz TF MessageFilter wants odom→base_link near each cloud time.
         self.publish_outputs(stamp_override=eff_s, include_path=False)
 
-    # --------------------
-    # Time handling
-    # --------------------
     def compute_dt(self, stamp_msg) -> float:
         if (not self.use_stamp_dt) or (stamp_msg is None):
             return self.nominal_dt
@@ -467,9 +406,6 @@ class EKFNode(Node):
 
         return dt
 
-    # --------------------
-    # IMU callback (CORE)
-    # --------------------
     def imu_callback(self, msg: Imu):
         eff_stamp = self._stamp_add_sec(msg.header.stamp, self._imu_stamp_offset_sec)
         dt = self.compute_dt(eff_stamp)
@@ -507,8 +443,6 @@ class EKFNode(Node):
                         timeout=Duration(seconds=self.imu_tf_timeout),
                     )
                 except TransformException:
-                    # Static base_link→imu_link may not exist at the IMU message time yet
-                    # (startup ordering / clock); latest transform is correct for fixed extrinsic.
                     tf_msg = self.tf_buffer.lookup_transform(
                         self.base_link_frame,
                         imu_frame,
@@ -575,11 +509,10 @@ class EKFNode(Node):
         if not self._imu_odom_publish_allowed():
             return
         self._last_imu_odom_pub_time = self.get_clock().now()
-        # Skip path on IMU: full Path at ~IMU Hz overloads RViz; path updates on LiDAR fusion only.
         self.publish_outputs(stamp_override=None, include_path=False)
 
     def lidar_delta_callback(self, msg: TwistStamped):
-        """Fuse NDT planar step (dx, dy) / dt as a weak velocity measurement in odom frame."""
+
         eff = self._stamp_add_sec(msg.header.stamp, self._lidar_stamp_offset_sec)
         dx = float(msg.twist.linear.x)
         dy = float(msg.twist.linear.y)
@@ -674,7 +607,7 @@ class EKFNode(Node):
             self.ekf.P[idx, idx] = max(float(self.ekf.P[idx, idx]), 0.8)
 
     def _lidar_bootstrap_from_xy(self, px: float, py: float) -> None:
-        """Snap position only; keep current yaw (xy-only LiDAR fusion mode)."""
+
         self.ekf.x[EKFPlanarIMU.I_PX] = px
         self.ekf.x[EKFPlanarIMU.I_PY] = py
         for idx in (EKFPlanarIMU.I_PX, EKFPlanarIMU.I_PY):
@@ -685,13 +618,7 @@ class EKFNode(Node):
     def _effective_lidar_meas_vars(
         self, twist_linear_xy: Optional[Tuple[float, float]]
     ) -> Tuple[float, float]:
-        """Scale pose/yaw measurement variance when planar speed is low (LIO jitter at rest).
 
-        Uses ``max(|v_lidar_twist|, |v_ekf|)`` for gating: FAST-LIO often fills twist.linear with
-        ~0 even while moving; trusting only twist would inflate variance during motion and break
-        xy fusion while yaw stays IMU-only (``lidar_fuse_xy_only``), which looks like a huge
-        heading/path mismatch.
-        """
         base_p = float(self.lidar_pose_var)
         base_y = float(self.lidar_yaw_var)
         if self._lidar_slow_speed_m <= 1e-9:
@@ -720,7 +647,6 @@ class EKFNode(Node):
         stamp,
         twist_linear_xy: Optional[Tuple[float, float]] = None,
     ):
-        # Planar correction: use yaw only; roll/pitch from LiDAR are ignored.
         q = [orientation.x, orientation.y, orientation.z, orientation.w]
         _roll, _pitch, yaw = euler_from_quaternion(q)
 
@@ -814,8 +740,6 @@ class EKFNode(Node):
                     self._lidar_bootstrap_from_xy_yaw(float(px), float(py), float(yaw))
                 applied = True
 
-        # Second line of defence: planar LiDAR after gated reject. Large R, no NIS.
-        # Default always runs when lidar_soft_fuse_after_gate_reject (NDT + gyro-only translation).
         if (not applied) and (not self.lidar_fuse_z_from_odom):
             px_e2 = float(self.ekf.x[EKFPlanarIMU.I_PX])
             py_e2 = float(self.ekf.x[EKFPlanarIMU.I_PY])
@@ -866,13 +790,8 @@ class EKFNode(Node):
                 "the LiDAR odometry source (NDT / LIO).",
                 throttle_duration_sec=8.0,
             )
-        # Do not overwrite last_imu_stamp: keep IMU dt chain; publish this
-        # correction with the LiDAR message time for TF/odom sync.
         self.publish_outputs(stamp_override=stamp, include_path=True)
 
-    # --------------------
-    # Publish results
-    # --------------------
     def publish_outputs(self, stamp_override=None, *, include_path: bool = True):
         pos, rpy = self.ekf.get_pose()
         px, py, pz = pos[0], pos[1], pos[2]
@@ -882,8 +801,6 @@ class EKFNode(Node):
         st = self.ekf.get_state()
         vx_w = float(st[EKFPlanarIMU.I_VX])
         vy_w = float(st[EKFPlanarIMU.I_VY])
-        # Planar EKF holds vx,vy in **world** frame; odometry twist must be in ``child_frame_id``
-        # (base_link). Rotate into the **published** heading ``yaw_pub`` (includes publish-only offset).
         cb = math.cos(float(yaw_pub))
         sb = math.sin(float(yaw_pub))
         vx_b = cb * vx_w + sb * vy_w
@@ -963,9 +880,6 @@ class EKFNode(Node):
 
         if self.publish_tf:
             t = TransformStamped()
-            # Must match odom.header.stamp (sensor / filter time). NDT looks up odom→base_link at
-            # PointCloud2.header.stamp; stamping TF with wall/sim "now" leaves the cloud in the TF
-            # future → lookup fails → NDT falls back to its stale pose while EKF still moves.
             stamp_tf = stamp
             if self._last_tf_pub_stamp_msg is not None:
                 t_prev = Time.from_msg(self._last_tf_pub_stamp_msg)

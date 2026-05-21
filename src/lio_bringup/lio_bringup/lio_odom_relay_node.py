@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""
-Relay FAST-LIO /Odometry (camera_init -> body) onto /lidar/odom (odom -> base_link)
-with the same pose/twist/covariance so localisation_ekf + frame checks stay unchanged.
 
-Assumes odom is aligned with FAST-LIO world (camera_init) and base_link with body
-for this workspace (see lio_bringup README).
-
-Optional ``body_to_base_yaw_deg`` (default 0): planar rotation from FAST-LIO **body** to robot
-``base_link`` (REP-103 +X forward). When RViz ``/ekf/path`` +X points **aft** while the robot
-drives **forward**, try **180.0** — Livox mount yaw is separate (``livox_extrinsic_yaw_deg``).
-
-Optional ``publish_tf`` (default false): broadcast ``odom`` -> ``base_link`` from each relayed
-message so one node owns that TF (use with ``ekf_node`` ``publish_tf``: false in LIO mode).
-
-Optional ``sync_tf_cloud_topic``: when set and ``publish_tf`` is true, also broadcast the same
-transform with each point-cloud ``header.stamp`` so ``tf2`` / message_filters can interpolate at
-LiDAR time (last odometry pose held forward until the next /Odometry).
-"""
 from __future__ import annotations
 
 import math
@@ -34,7 +17,7 @@ from tf_transformations import quaternion_from_euler, quaternion_multiply
 
 
 def _rotate_twist_body_to_base(tw, yaw_rad: float) -> None:
-    """Twist is expressed in child frame; rotate linear + angular from body to base (planar Z)."""
+
     if abs(yaw_rad) < 1e-9:
         return
     c, s = math.cos(yaw_rad), math.sin(yaw_rad)
@@ -49,12 +32,7 @@ def _rotate_twist_body_to_base(tw, yaw_rad: float) -> None:
 
 
 def _apply_body_to_base_yaw(msg: Odometry, yaw_rad: float) -> Odometry:
-    """Return a copy with pose + twist adjusted by fixed yaw about Z (body -> base_link).
 
-    Orientation uses **quaternion_multiply** (post-multiply by R_z(yaw)): T_odom_base = T_odom_body
-    @ R_body_base. Do **not** add yaw to Euler-decomposed angles — that desynchronizes heading from
-    LiDAR position when roll/pitch are non-zero, so /ekf/path can look flipped vs the fused arrow.
-    """
     out = deepcopy(msg)
     if abs(yaw_rad) < 1e-9:
         return out

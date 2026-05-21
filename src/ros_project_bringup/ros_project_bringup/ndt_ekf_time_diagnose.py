@@ -1,32 +1,5 @@
 #!/usr/bin/env python3
-"""One-terminal probe for NDT stuck / rotate-only: TF at cloud time vs NDT step sizes.
 
-Run while launch_slam (NDT path) + bag play are running.
-
-What it checks
---------------
-1) ``lookup_transform(odom, base_link, cloud.header.stamp)`` — same query NDT uses for the
-   scan_to_map prior. FAIL here ⇒ NDT falls back to its last integrated pose ⇒ tiny /lidar/odom
-   bubble while /ekf/odom can still move (IMU + weak LiDAR).
-
-2) ``lookup_transform(..., Time())`` — latest TF. If (1) fails but (2) works ⇒ time / stamp
-   mismatch between EKF-published TF and LiDAR stamps.
-
-3) Last ``/lidar/relative_motion`` (dx, dy, dθ): if dx,dy stay ~0 while TF (2) translates a lot,
-   NDT is skipping (fitness / convergence) or the prior chain is wrong.
-
-How to read
------------
-- ``at_cloud_stamp=FAIL`` with "extrapolation into the future" but ``TF_latest=OK`` ⇒ the cloud
-  stamp is **ahead of** the newest ``odom``→``base_link`` sample (NDT/diagnose often run **before**
-  ``ekf_node``'s ``/livox/lidar`` callback publishes that stamp). **Not** a broken graph; NDT can use
-  latest TF as initial guess (see ``lidar_odometry_node``). ``FAIL`` **and** ``TF_latest=FAIL`` ⇒
-  real TF / clock / sim_time problem.
-- ``at_cloud_stamp=OK`` but ``|dx|,|dy|`` ~ 0 and ``|dtheta|`` not ⇒ NDT aligns rotation only
-  (geometry / extrinsic / degenerate map) — next: rosout NDT fitness / convergence, livox extrinsic.
-- ``at_cloud_stamp=OK`` and ``|dx|,|dy|`` non-zero but /lidar/odom still flat ⇒ check EMA on
-  ``/lidar/odom`` vs ``/lidar/odom_raw``.
-"""
 from __future__ import annotations
 
 import math

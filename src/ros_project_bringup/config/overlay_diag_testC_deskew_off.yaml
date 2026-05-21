@@ -1,3 +1,2 @@
 slam_bringup:
-  # Test C: isolate deskew path.
   keyframe_deskew_enable: false

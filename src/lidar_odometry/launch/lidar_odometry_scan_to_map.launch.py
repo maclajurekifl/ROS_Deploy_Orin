@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Same as lidar_odometry.launch.py but registration_mode:=scan_to_map."""
+
 from launch import LaunchDescription
 from launch_ros.actions import Node
 

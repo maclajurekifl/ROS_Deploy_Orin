@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Exponential moving average filter for nav_msgs/Odometry (NDT -> EKF bridge).
 
-NDT publishes to ``in_topic`` (typ. /lidar/odom_raw); this node publishes ``out_topic``
-(typ. /lidar/odom) so EKF and tooling see a smoother pose.
-
-Modes:
-  xy   — smooth position.x,y only; z,q,twist from measurement
-  xyz  — smooth x,y,z; orientation + twist from measurement
-  full — smooth xyz + euler RPY + twist.xyz (helps reduce yaw jitter in EKF)
-"""
 from __future__ import annotations
 
 import math
@@ -35,7 +26,6 @@ def _wrap_pi(a: float) -> float:
 class LidarOdomEmaSmooth(Node):
     def __init__(self) -> None:
         super().__init__('lidar_odom_ema_smooth')
-        # use_sim_time is set by launch (sim_time_param); do not re-declare → ParameterAlreadyDeclaredException
         try:
             ust = bool(self.get_parameter('use_sim_time').get_parameter_value().bool_value)
         except ParameterNotDeclaredException:
@@ -94,7 +84,6 @@ class LidarOdomEmaSmooth(Node):
         prev_p = self._prev_out.pose.pose.position
         prev_o = self._prev_out.pose.pose.orientation
 
-        # Position EMA
         out.pose.pose.position.x = float(
             ap * float(p.x) + (1.0 - ap) * float(prev_p.x)
         )
@@ -108,7 +97,6 @@ class LidarOdomEmaSmooth(Node):
         else:
             out.pose.pose.position.z = float(p.z)
 
-        # Orientation
         if self._mode == 'full':
             r_meas, pit_meas, y_meas = tft.euler_from_quaternion(
                 [float(o.x), float(o.y), float(o.z), float(o.w)]
@@ -134,7 +122,6 @@ class LidarOdomEmaSmooth(Node):
         else:
             out.pose.pose.orientation = o
 
-        # Twist linear EMA when full twist smoothing helps shape
         if self._mode == 'full':
             vl = msg.twist.twist.linear
             pv = self._prev_out.twist.twist.linear

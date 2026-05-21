@@ -1,18 +1,4 @@
-"""
-FAST-LIO backend for launch_slam when use_lio:=true.
 
-Starts fastlio_mapping + lio_odom_relay_node (/Odometry -> /lidar/odom as odom->base_link).
-When ``lio_relay_publish_tf`` is true, the relay also broadcasts TF odom->base_link (~scan rate).
-That is sparse vs EKF TF and can worsen map smear; use with ``ekf_node`` ``publish_tf`` false only
-if you accept that trade-off.
-
-Config paths (under each package's **share** after install):
-  **fast_lio** — ``fastlio_params_file`` (default ``config/mid360.yaml``).
-  **lio_bringup** — ``lio_overlay_params_file`` (default ``config/fastlio_mid360_overlay.yaml``).
-  **Optional** — ``lio_bag_overlay_params_file``: path **relative to ros_project_bringup** share,
-  merged **last** (e.g. ``config/fastlio_bag_replay_overlay.yaml``). Use for PointCloud2 bags that
-  omit Livox ``tag``/``line`` fields (``preprocess.lidar_type: 0``). Empty = skip (robot / live Livox).
-"""
 from __future__ import annotations
 
 import os

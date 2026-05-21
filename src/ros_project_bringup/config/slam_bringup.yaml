@@ -1,80 +1,22 @@
-# =============================================================================
-# SLAM stack bringup — loaded by: ros2 launch ros_project_bringup launch_slam.launch.py
-# =============================================================================
-#
-# Path: bringup_config → ROS_PROJECT_SLAM_CONFIG → this file.
-# Knob list matches docs/tuning.md (§1–9). Suggested values + what each does: docs/tuning.md
-# All other keys: “REST OF BRINGUP” below.
-#
-# Default profile: **live robot + SLAM on robot**, sensors and RViz elsewhere (`launch_sensors:=false`,
-# `start_rviz: false`, `use_sim_time` launch default false). Livox + Microstrain run from robot bringup;
-# this launch only starts SLAM nodes. **FAST-LIO** (`use_lio: true`, `use_lidar_fusion: false`).
-# For PCL NDT: `use_lio: false` and `use_lidar_fusion: true` (or `config/livox_ndt_bag_axes_overlay.yaml`).
-# Set `microstrain_imu_origin: local` only when this host runs the GX5 USB driver (`launch_sensors:=true`).
-# Livox `/livox/imu` in this workspace’s driver uses the same `frame_id` as the cloud (`livox_cloud_frame_id`).
-# `keyframe_deskew_imu_rotate_gyro_to_frame` must match that cloud frame so ω is rotated before deskew.
-# When the local Livox driver is off (`launch_sensors:=false`), launch publishes identity TF
-# `livox_frame`→`livox_imu_child_frame` if `publish_livox_imu_sensor_frame_tf` is true.
-# **Do not use child frame name `sensor` here** — Microstrain often publishes `/imu/data` with
-# `header.frame_id: sensor`; a Livox bridge named `sensor` hijacks that TF and breaks EKF / gyro checks.
-# For DDS laptop bringup, use `publish_microstrain_imu_sensor_frame_tf` + `microstrain_imu_sensor_child_frame`
-# to publish `imu_mount_child_frame`→`sensor` (identity) instead of overloading Livox.
-# Default `livox_extrinsic_yaw_deg` is **0** (typical bag laptop + forward Livox vs base +X). Reversed sensor:
-# merge `config/livox_extrinsic_yaw_180_overlay.yaml` via bringup_config, or set `ROS_PROJECT_SLAM_CONFIG` to
-# a machine YAML that overrides `livox_extrinsic_*` / `imu_mount_*` to match CAD.
-# `use_sim_time` is set from the launch arg (default **false** = wall clock). Bag replay: pass
-# ``use_sim_time:=true`` and play with ``ros2 bag play ... --clock``. Start `launch_slam` *before* the bag
-# so `/clock` does not advance ahead of the stack (avoids flipped / mirrored first alignment).
-# **ZED (or any camera) on the same ROS_DOMAIN_ID:** if the ZED wrapper publishes ``odom``→``zed_camera_link``
-# (positional tracking) while this stack publishes ``map``→``odom`` and ``odom``→``base_link``, both compete
-# for ``odom``. Stopped or mis-clocked ZED nodes leave **old** ZED TF stamps in the buffer → ``TF_OLD_DATA``
-# for frame ``odom`` (``view_frames`` shows ``zed_*`` at past times vs fresh ``base_link``). Fix: disable ZED
-# publish_tf / odometry TF (camera-only), run ZED on another ``ROS_DOMAIN_ID``, or do not run ZED while SLAM
-# is validating TF.
-# -----------------------------------------------------------------------------
 
 slam_bringup:
-  # ===========================================================================
-  # KNOBS — only parameters listed in docs/tuning.md
-  # ===========================================================================
 
   use_microstrain_imu: true
-  # EKF subscribes here when use_microstrain_imu is true. With microstrain_imu_origin: robot, this must match
-  # the robot driver: Foxy lifecycle build publishes /imu/data only. Humble driver with raw-only streaming
-  # uses /imu/data_raw — set that here if your robot runs the newer Microstrain stack.
   microstrain_imu_topic: /imu/data
-  # local = serial driver on THIS machine when launch_sensors; robot = IMU on DDS only (default laptop).
   microstrain_imu_origin: robot
-  # When `launch_sensors:=false` and GX5 `/imu/data` uses `header.frame_id: sensor`, publish identity
-  # `imu_mount_child_frame` → `microstrain_imu_sensor_child_frame` so EKF can transform ω,a into base_link.
   publish_microstrain_imu_sensor_frame_tf: true
   microstrain_imu_sensor_child_frame: sensor
-  # TF `imu_mount_child_frame` → `microstrain_imu_sensor_child_frame` when driver is off (default identity).
-  # If RViz shows Microstrain axes 90° wrong about +Z, set yaw ±90 (REP-103: positive yaw = CCW from above).
   microstrain_sensor_alias_roll_deg: 0.0
   microstrain_sensor_alias_pitch_deg: 0.0
-  # Rotation imu_link → GX5 `frame_id` (often `sensor`). Non-zero here + wrong imu_mount_yaw → wrong ωz in base_link → spin.
   microstrain_sensor_alias_yaw_deg: 0.0
-# When launch_sensors:=false, publish ``imu_mount_*`` and Livox extrinsic static TFs from this YAML if true
-# (bag replay / laptop without robot ``/tf_static``). **true** by default so ``base_link``→``imu_link`` and
-# ``base_link``→``livox_frame`` exist for EKF + deskew when this launch does not start the drivers.
-# Set **false** only after ``ros2 topic echo /tf_static --once`` confirms the robot already publishes the
-# same transforms (avoids duplicate ``static_transform_publisher`` warnings).
   publish_robot_static_tf_when_sensors_off: true
 
-  # Odometry front-end: FAST-LIO (default) vs PCL NDT (`use_lidar_fusion: true`, `use_lio: false`).
-  # Launch still allows `use_lio:=true|false` / `use_lidar_fusion:=...` to override merged YAML.
   use_lio: true
   use_lidar_fusion: false
 
-  # Match docs/tuning.MD. Loosen only if rosout shows "LiDAR odom EKF update rejected (NIS gate)".
-  # Keep LiDAR fusion conservative to avoid EKF yaw-basin flips.
   ekf_lidar_pose_var: 0.022
-  # Measurement variance on LiDAR yaw (rad²): **smaller** → Kalman trusts /lidar/odom yaw **more** (pulls EKF heading toward NDT).
-  # **Larger** → trusts LiDAR yaw less → heading follows IMU integration more. If NDT yaw matches motion but /ekf/odom spins, try **lowering** (e.g. 0.012–0.018).
   ekf_lidar_yaw_var: 0.018
   ekf_lidar_gate_nis: 96.0
-  # Optional: set to /lidar/relative_motion to fuse NDT step into EKF vx,vy (can disturb map yaw vs scan — leave "" unless tuned).
   ekf_lidar_delta_topic: ""
   ekf_lidar_delta_vel_var: 0.22
   ekf_lidar_delta_gate_nis: 200.0
@@ -82,79 +24,50 @@ slam_bringup:
 
   ekf_imu_stamp_offset_sec: 0.0
   ekf_lidar_stamp_offset_sec: 0.0
-  # ekf_node: throttled LiDAR fusion line (nis, innov_xy/yaw, gated vs soft apply). Enable while diagnosing spin / NIS rejects.
   ekf_lidar_fusion_debug_log: false
   ekf_lidar_fusion_debug_throttle_sec: 2.0
-  # After gated (x,y,yaw) reject on NDT path, one soft ungated step (default true — fixes small-Δxy rejects).
   ekf_lidar_soft_fuse_after_gate_reject: true
-  # true: fuse only x,y from /lidar/odom (ignore NDT yaw — use with imu_gyro_z_bias calibration or stable gyro).
   ekf_lidar_fuse_xy_only: true
-  # Mean ωz on /imu/data at rest (after TF to base_link), same sign as reading. Use 0 when auto bias is on.
   ekf_imu_gyro_z_bias_rad_s: 0.0
-  # Bag starts still: average ωz for first N seconds (after TF), subtract automatically (+ manual above).
   ekf_imu_auto_gyro_z_bias_enable: false
   ekf_imu_auto_gyro_z_bias_tune_sec: 5.0
-  # 1.0 normal; -1.0 if integrated yaw runs opposite (TF/sign experiment).
   ekf_imu_gyro_z_scale: 1.0
-  # Below this planar speed (m/s), inflate LiDAR pose variance — gate uses ``max(|twist|,|EKF v|)``.
-  # Re-enabled to calm stop/slow jitter without weakening normal-motion fusion.
   ekf_lidar_fuse_slow_linear_speed_m_s: 0.10
   ekf_lidar_pose_var_below_slow_speed_scale: 16.0
 
-  # NDT defaults tuned vs FAST-LIO (locked-window bench 2026-05: voxel 0.46 vs 0.38 lowered align RMSE).
   lidar_voxel_leaf_size: 0.4
-  # Moderate acceptance (too tight → brittle scan_to_map + NIS rejects on hard segments).
   lidar_max_fitness_score: 7.0
   lidar_ndt_max_iterations: 40
   lidar_ndt_step_size: 0.06
   lidar_min_points_per_cloud: 300
-  # Re-enable TF prior to keep NDT heading in the same basin as base_link motion.
-  # Debug: false → initial guess from integrated lidar pose only (not EKF TF).
   lidar_use_tf_initial_guess: false
 
-  # Fine phase trim for residual yaw smear (small negative keeps IMU slightly ahead of cloud stamp).
   keyframe_deskew_imu_stamp_offset_sec: -0.001
   keyframe_deskew_cloud_stamp_offset_sec: 0.0
-  # Loosen if deskew falls back during motion (less scan smear in turns; try 0.10–0.15).
   keyframe_deskew_max_imu_age_sec: 0.13
   keyframe_deskew_imu_sign: 1.0
   keyframe_deskew_enable: true
-  # false: deskew uses ``keyframe_deskew_imu_topic`` (default /livox/imu) — **same clock as Livox
-  # per-point timestamps**, best for turn deskew. true: EKF IMU rotated into livox_frame; stamps
-  # rarely align with Livox sweep time → residual skew/smear when rotating despite correct TF.
   keyframe_deskew_imu_follow_ekf: false
 
-  # During **turns**: more / tighter keyframes + stable deskew reduce curved walls. Straight runs stay good.
   keyframe_min_dist_m: 0.15
   keyframe_min_yaw_deg: 3.0
   keyframe_min_time_sec: 0.55
-  # Final merge voxel for ``/keyframe_map`` (centroid per cell). Smaller → sharper walls, more points.
   keyframe_voxel_leaf_m: 0.06
   keyframe_max_map_points: 1200000
   keyframe_max_pts_per_scan: 50000
-  # With ``keyframe_apply_pose_graph_map: true``, each keyframe is stored at this voxel **before** pose-graph warp.
-  # Package default 0.32 m is sparse on Livox; **0.12–0.18** restores detail (more RAM). Independent of ``keyframe_voxel_leaf_m`` merge step.
   keyframe_map_batch_store_voxel_m: 0.16
 
-  # Odom edges vs loop closure: high ``pose_graph_weight_loop`` can skew the map if a loop is soft/wrong.
-  # If map twists after revisiting a place: lower loop weight (e.g. 40) or tighten ``keyframe_loop_overlap_ratio``.
   pose_graph_weight_odom: 12.0
   pose_graph_weight_loop: 48.0
   pose_graph_max_nodes: 500
   pose_graph_max_loop_edges: 40
-  # Stricter overlap → fewer false loop edges (see launch_slam keyframe_overrides).
   keyframe_loop_overlap_ratio: 0.36
 
-  # ===========================================================================
-  # REST OF BRINGUP (required by launch_slam.launch.py)
-  # ===========================================================================
 
   microstrain_port: "/dev/ttyACM0"
   microstrain_baud: 115200
   microstrain_imu_data_raw_rate: 200
   microstrain_imu_data_rate: 0
-  # Merged over apt `microstrain_inertial_driver_common/config/params.yml` before port/frame overrides.
-  # Set to "" to skip (vendor defaults only).
   microstrain_params_overlay: config/microstrain_params_overlay.yaml
   microstrain_frame_id: imu_link
   microstrain_mount_frame_id: base_link
@@ -165,26 +78,13 @@ slam_bringup:
   imu_mount_z: 0.065
   imu_mount_roll_deg: 0.0
   imu_mount_pitch_deg: 0.0
-  # Yaw from base_link → imu_link: use 0 if gyro axes match REP-103 base (fix path spin from wrong ωz).
-  # If ``/ekf/path`` **heading** looks correct but **translation** still moves opposite drive direction,
-  # the Microstrain linear accel may be wrong in ``base_link`` — try **``imu_mount_yaw_deg: 180.0``**
-  # (or 90 / −90 per CAD) so IMU integration matches LiDAR odom; see docs/imu_mount_note.md.
   imu_mount_yaw_deg: 0.0
 
-  # Livox node from this launch only when ``launch_sensors:=true`` (ignored when sensors off).
   start_livox_driver: true
-  # RViz on this machine; use false when RViz runs on another PC (same ``ROS_DOMAIN_ID``).
   start_rviz: false
   start_keyframe_map: true
-  # Disable loop closure / pose graph while front-end (NDT + EKF) is being validated against FAST-LIO.
   keyframe_loop_closure_enable: true
   start_pose_graph: true
-  # Pose-graph drift correction — pick **one** (see ``keyframe_scan_map/README.md``):
-  # **A)** ``pose_graph_publish_map_odom_tf: true`` + ``keyframe_apply_pose_graph_map: false`` — TF-only fix:
-  #    merged map points are **not** warped when ``map``→``odom`` updates → ghost walls / layered scans.
-  # **B)** ``pose_graph_publish_map_odom_tf: false`` + ``keyframe_apply_pose_graph_map: true`` — rebuild ``/keyframe_map``
-  #    from corrected ``/pose_graph/corrected_keyframes`` (launch adds **static** identity ``map``→``odom``).
-  # Prefer **B** for cleaner walls when loops run; use **A** if you cannot afford map rebuilds.
   pose_graph_publish_map_odom_tf: false
   keyframe_apply_pose_graph_map: true
 
@@ -193,28 +93,19 @@ slam_bringup:
   livox_extrinsic_z: 0.38
   livox_extrinsic_roll_deg: 0.0
   livox_extrinsic_pitch_deg: 0.0
-  # LiDAR is mounted facing backwards: rotate base_link -> livox_frame by 180° about +Z.
   livox_extrinsic_yaw_deg: 180.0
   livox_cloud_frame_id: livox_frame
-  # Child frame for TF livox_cloud_frame_id → child (default `livox_imu`). Not `sensor` — see header comment.
   livox_imu_child_frame: livox_imu
-  # Livox built-in IMU frame vs cloud frame (bag laptop; driver off). Default identity; set yaw 180 if chip is
-  # reversed about +Z vs `livox_frame` after `livox_extrinsic_*` is correct.
   livox_imu_bridge_roll_deg: 0.0
   livox_imu_bridge_pitch_deg: 0.0
   livox_imu_bridge_yaw_deg: 0.0
-  # Identity ``livox_frame``→``livox_imu`` when this launch does not start the Livox node (deskew / TF).
-  # Set false only if another node already publishes that link on ``/tf_static``.
   publish_livox_imu_sensor_frame_tf: true
 
   lidar_cloud_topic: /livox/lidar
-  # When lidar_odom_smooth_enable is true, NDT publishes raw here; smoothed poses go to lidar_odom_topic.
   lidar_odom_raw_topic: /lidar/odom_raw
   lidar_odom_topic: /lidar/odom
   lidar_odom_smooth_enable: true
-  # `xyz` = smooth x,y,z only; orientation/twist pass-through (validated vs FAST-LIO locked window; fixes EMA yaw lag vs `full`).
   lidar_odom_smooth_mode: xyz
-  # EMA F1 (α_pose 0.10, α_twist 0.12): best vs FAST-LIO on locked-window replays; F1p5 (0.12/0.14) worse RMSE/θ.
   lidar_odom_smooth_alpha_pose: 0.10
   lidar_odom_smooth_alpha_twist_linear: 0.12
   lidar_delta_topic: /lidar/relative_motion
@@ -222,66 +113,40 @@ slam_bringup:
   lidar_odom_frame: odom
   lidar_base_frame: base_link
   lidar_ndt_transformation_epsilon: 0.01
-  # NDT VoxelGridCovariance (PCL 1.12): more points per cell + eigen inflation reduce invalid-eigen spam on sparse Livox cells.
   lidar_ndt_voxel_min_points: 10
   lidar_ndt_voxel_cov_eig_inflation_ratio: 0.05
   lidar_publish_tf: false
   lidar_crop_range_m: 40.0
   lidar_ndt_resolution: 1.2
-  # scan_to_map: if > 0, run a coarse NDT pass then refine at lidar_ndt_resolution (translation stability).
   lidar_ndt_coarse_resolution: 0.0
-  # After NDT: blend planar yaw between EKF/T_pred (weight) and NDT (1-weight). Requires fuse_prior true.
-  # false: use NDT planar yaw (do not blend toward EKF prior — avoids IMU yaw overpowering LiDAR).
   lidar_ndt_fuse_prior_planar_yaw: false
   lidar_ndt_prior_yaw_blend: 0.85
-  # Large |Δyaw| with tiny planar correction → likely corridor degeneracy (reject, use prediction).
   lidar_ndt_corridor_degeneracy_check: true
   lidar_ndt_corridor_spin_yaw_min_rad: 0.5
   lidar_ndt_corridor_spin_max_corr_xy_m: 0.1
-  # If > 0 and planar |Δxy| from NDT is below this, reject and use prediction (can false-trigger when stopped).
   lidar_ndt_fallback_if_planar_correction_below_m: 0.03
-  # Reject update if planar NDT base step vs EKF base step dot < 0 (both steps above mins below).
   lidar_ndt_reject_opposite_ekf_step: true
   lidar_ndt_opposite_motion_min_ekf_step_m: 0.05
   lidar_ndt_opposite_motion_min_ndt_step_m: 0.05
-  # If either > 0, only merge aligned scan into map when Δxy or |Δyaw| exceeds threshold (keyframe map).
   lidar_map_merge_keyframe_min_translation_m: 0.0
   lidar_map_merge_keyframe_min_yaw_deg: 0.0
   lidar_registration_mode: scan_to_map
-  # Wider window: EKF TF at exact cloud stamp can lag a few ms at startup; avoids first-scan fallback.
   lidar_tf_initial_guess_timeout_sec: 0.65
-  # Start NDT this many seconds after EKF (bag/DDS: EKF needs a few IMU steps before odom->base_link exists).
-  # Set 0.0 on a live robot if you want NDT from the first instant.
   lidar_node_start_delay_sec: 1.5
-  # After static TFs: delay ``ekf_node`` so tf2 has ``base_link``→``imu_link`` (and Livox mounts) before
-  # first IMU / deskew lookups — avoids transient "frame does not exist" and TF stamp races at startup.
-  # Set **0.0** if you need EKF from the first instant (e.g. tests).
   ekf_node_start_delay_sec: 3.0
-  # After EKF + /lidar/odom: static map→odom exists; FAST-LIO + relay + lidar link TF should be stable.
   keyframe_map_node_start_delay_sec: 8.0
-  # Run after keyframe so /keyframe_map/keyframes exists before first subscribe.
   pose_graph_node_start_delay_sec: 10.0
-  # Drop first N Livox clouds before any keyframe (Jetson: avoids flipped ghost from TF/IMU init races).
   keyframe_warmup_clouds_to_skip: 12
   lidar_map_merge_voxel_leaf_size: -1.0
   lidar_map_max_points: 200000
-  # scan_to_map: every N successful NDT steps, rebuild target map from last K aligned scans (0=off).
-  # Helps map poisoning but drops long-range structure → can increase drift / hurt EKF; enable only when tuning that tradeoff.
   lidar_scan_to_map_map_refresh_period: 0
   lidar_scan_to_map_refresh_keep_scans: 3
-  # scan_to_map: true = sensor-frame source + T_odom_sensor_pred guess (recommended); false = legacy odom-frame source.
   lidar_scan_to_map_register_sensor_frame: true
-  # Per-scan planar NDT correction vs prediction: stdout + logger lines "NDT_RELATIVE: tx, ty ..." (scan_to_map / scan_to_scan).
   lidar_log_ndt_relative: true
-  # Stdout POSE: x,y after each scan_to_map step (and PRED vs NEW when registration debug on).
   lidar_log_accumulated_pose: true
-  # Skip NDT until EKF odom prior has moved this far in xy (m), reducing early bad alignment / map poisoning.
-  # ndt_gate_force_after_sec > 0 allows NDT anyway after that time (e.g. rotation-in-place at start).
-  # 0 → do not wait for EKF prior motion before running NDT (avoids “never runs” if EKF stuck).
   lidar_ndt_gate_until_prior_translation_m: 0.0
   lidar_ndt_gate_force_after_sec: 10.0
 
-  # ``auto`` → true with LIO (fuses z + full pose); then ``ekf_lidar_fuse_xy_only`` is ignored. Use **false** for planar + xy_only.
   ekf_lidar_fuse_z_from_odom: auto
   ekf_lidar_odom_topic: /lidar/odom
   ekf_lidar_pose_topic: ""
@@ -289,35 +154,21 @@ slam_bringup:
   ekf_lidar_z_var: 0.05
   ekf_lidar_require_frames: true
   ekf_lidar_use_roll_pitch: false
-  # Overridden to microstrain_imu_topic when use_microstrain_imu is true (EKF uses GX5 on /imu/data).
   ekf_imu_topic: /imu/data
   ekf_publish_topic: /ekf/odom
   ekf_pose_topic: /ekf/pose
   ekf_path_topic: /ekf/path
   ekf_odom_frame: odom
   ekf_base_link_frame: base_link
-  # Publish-only yaw on ``/ekf/odom``/pose/TF (not fusion). **Twist** is world→base_link at this heading.
-  # Keep 0 unless you have verified /lidar/odom yaw+translation are consistent and only the RViz triad is backwards.
   ekf_publish_base_link_yaw_offset_deg: 0.0
   ekf_publish_tf: true
-  # LIO: relay can publish odom->base_link TF (set true) so EKF does not — single authority.
-  # Default false: relay TF is only ~LiDAR rate → sparse /tf vs EKF+cloud-stamp TF → tf2 interpolation
-  # smear in keyframe/RViz. Prefer EKF TF unless you disable EKF or add a high-rate TF filler.
   ekf_publish_tf_when_lio: true
   lio_relay_publish_tf: false
-  # When relay owns TF: also publish odom->base_link at each LiDAR cloud stamp (topic below).
   lio_relay_auto_sync_tf_cloud: true
   lio_relay_sync_tf_cloud_topic: ""
-  # FAST-LIO ``body`` vs robot ``base_link`` (REP-103 +X forward). Relay uses **quaternion_multiply**
-  # (not Euler+yaw) so heading stays consistent with LiDAR ``(x,y)``. Set **0.0** if ``/ekf/path`` +X already matches nose.
-  # With LiDAR extrinsic yaw fixed above, FAST-LIO body should align with base_link; keep relay yaw at 0.
   lio_relay_body_to_base_yaw_deg: 0.0
-  # ~40 Hz effective /imu/data on typical GX5 @115200; use_stamp_dt still refines per step.
   ekf_nominal_dt: 0.025
   ekf_use_stamp_dt: true
-  # null = keep predict_use_linear_accel from ekf_params_yaml (GX5 preset often false). true/false
-  # forces override — true can strengthen translation for NDT TF guess on bag replay; false reduces accel junk when tilted/bumpy.
-  # If LiDAR odom heading is right but **path still walks backward**, try **false** to rely on LiDAR xy more than IMU accel integration.
   ekf_predict_use_linear_accel: null
   ekf_max_odom_tf_publish_rate_hz: 0.0
   ekf_imu_source_topic: /ekf/imu_source
@@ -329,24 +180,18 @@ slam_bringup:
   keyframe_robot_frame: base_link
   keyframe_publish_path: true
   keyframe_map_publish_min_interval_sec: 0.45
-  # false: skip keyframes when TF missing at cloud stamp (reduces smear from wrong/latest pose).
   keyframe_tf_allow_latest_fallback: false
   keyframe_tf_future_extrapolation_use_latest: true
-  # Map insertion: T_map<-livox = T_map<-odom (TF) * T_odom<-base (/lidar/odom) * T_base<-livox (TF).
   keyframe_use_lidar_odom_for_robot_pose: true
   keyframe_lidar_odom_topic: /lidar/odom
-  # Nearest /lidar/odom stamp vs cloud (only if approximate_sync false). Prefer sync below.
   keyframe_lidar_odom_max_age_sec: 0.015
   keyframe_lidar_odom_approximate_sync: true
   keyframe_lidar_odom_approx_sync_slop_sec: 0.004
-  # Small queue + shallow LiDAR sub QoS avoids multi-second backlog when deskew is CPU-heavy.
   keyframe_lidar_odom_approx_sync_queue_size: 10
-  # Sensor-frame prefilter: remove very near self-hits (RTK mast/chassis), far clutter, weak returns.
   keyframe_prefilter_min_range_m: 0.4
   keyframe_prefilter_max_range_m: 12.0
   keyframe_prefilter_self_radius_m: 0.5
   keyframe_prefilter_self_bbox_enable: true
-  # LiDAR mount is forward of base_link origin (x=+0.12, y≈0): bias self mask forward.
   keyframe_prefilter_self_bbox_min_x: -0.2
   keyframe_prefilter_self_bbox_max_x: 0.5
   keyframe_prefilter_self_bbox_min_y: -0.3
@@ -363,20 +208,16 @@ slam_bringup:
   keyframe_tf_lookup_timeout_sec: 0.25
   keyframe_tf_buffer_cache_sec: 180.0
   keyframe_deskew_imu_topic: /livox/imu
-  # For residual rotational (yaw) smear, keep deskew in planar yaw mode.
   keyframe_deskew_model: yaw_only
-  # ~1.3 s at 200 Hz — enough for a sweep; very large buffers widen IMU time span unnecessarily.
   keyframe_deskew_imu_buffer_max_samples: 256
   keyframe_deskew_imu_interpolate: true
   keyframe_deskew_mean_gyro_fallback: true
   keyframe_deskew_imu_rotate_gyro_to_frame: livox_frame
   keyframe_deskew_imu_rotation_tf_timeout_sec: 0.12
-  # Livox /livox/imu often uses frame_id ``sensor``; that must not use Microstrain's ``sensor`` TF.
   keyframe_deskew_livox_imu_sensor_as_cloud_identity: true
   keyframe_rotation_adaptive_keyframes: true
   keyframe_rotation_gyro_thresh_rad_s: 0.28
   keyframe_rotation_keyframe_scale: 0.5
-  # Safety gate (disabled by default): drop clouds with implausibly large jumps vs last keyframe.
   keyframe_reject_unstable_frame_enable: false
   keyframe_reject_unstable_frame_max_translation_m: 1.0
   keyframe_reject_unstable_frame_max_yaw_deg: 45.0
@@ -389,9 +230,7 @@ slam_bringup:
   keyframe_auto_level_max_tilt_deg: 35.0
 
   pose_graph_map_odom_tf_period_sec: 0.1
-  # **1.0** = map→odom matches each graph solve. Lower α can ease jumps but may add visible lag/skew in map.
   pose_graph_map_odom_tf_smooth_alpha: 1.0
-  # Reject ``/ekf/odom`` header stamps this far behind wall clock when stamping map→odom (stale DDS / replay).
   pose_graph_odom_stamp_max_past_sec: 25.0
   pose_graph_odom_stamp_max_future_sec: 2.0
 
@@ -407,13 +246,7 @@ slam_bringup:
   livox_launch_relpath: launch_ROS2/rviz_MID360_launch.py
   fastlio_params_file: config/mid360.yaml
   lio_overlay_params_file: config/fastlio_mid360_overlay.yaml
-  # When ``use_lio`` and ``launch_sensors:=false`` (bag / DDS laptop), merged **after** lio_overlay:
-  # PointCloud2 without Livox ``tag``/``line`` → ``preprocess.lidar_type: 0`` + ``publish_tf: true``.
-  # Set to "" to skip (e.g. custom Livox handler). On robot (``launch_sensors:=true``) this is never loaded.
   lio_bag_overlay_params_file: config/fastlio_bag_replay_overlay.yaml
-  # Bag + LIO: start ``tf_bridge_fastlio_odom_compare`` (static ``odom``->``camera_init``) so
-  # ``odom_trajectory_tools`` / RViz can relate ``camera_init``/``body`` to EKF ``odom``->``base_link``.
-  # Set false if you already publish that edge or run the bridge manually.
   lio_auto_tf_bridge: true
 
   livox_config_path: ""

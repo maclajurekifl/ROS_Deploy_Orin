@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""
-Lightweight planar pose graph:
-  - Nodes: keyframe poses in `map` (from /keyframe_map/keyframes).
-  - Edges: odometry-like constraints between consecutive keyframes.
-  - Loop edges: /keyframe_map/loop_closure_pair [i, j] → identity relative constraint.
 
-**Optimization (no g2o):** variables are ``(x, y, yaw)`` for poses 1..N-1; pose 0 is fixed.
-Stacked SE(2) edge residuals (weighted) are minimized with **``scipy.optimize.least_squares``**
-(method ``trf``). Depends on ``python3-scipy`` (declared in ``package.xml``).
-
-Publishes /pose_graph/corrected_keyframes (nav_msgs/Path).
-
-Optional **map → odom** correction (`publish_map_odom_tf`): after each successful solve, sets
-`T_map_odom = T(corrected_last) * inv(T(raw_last))` (SE2) and republishes it periodically so the
-TF tree absorbs drift at the map–odom boundary. **Disable** `launch_slam`'s static `map→odom`
-when this is enabled (bringup does that automatically).
-"""
 from __future__ import annotations
 
 import math
@@ -93,14 +77,9 @@ class PoseGraphNode(Node):
         self.declare_parameter('max_loop_edges', 40)
         self.declare_parameter('publish_map_odom_tf', False)
         self.declare_parameter('map_odom_tf_period_sec', 0.1)
-        # SE(2) low-pass on map→odom: 1.0 = use each graph solve as-is; **0.1–0.35** eases TF jumps / map skew
-        # when new keyframes or loop edges re-optimize the chain.
         self.declare_parameter('map_odom_tf_smooth_alpha', 1.0)
-        # Stamp map→odom with latest /ekf/odom time so tf2 matches lidar-timed odom→base_link.
         self.declare_parameter('odom_stamp_topic', '/ekf/odom')
-        # Ignore /ekf/odom samples whose header stamp is this far behind node clock (stale DDS / replay).
         self.declare_parameter('odom_stamp_max_past_sec', 25.0)
-        # Ignore stamps this far in the future vs clock (bad clock sync).
         self.declare_parameter('odom_stamp_max_future_sec', 2.0)
 
         self._kf_topic = self.get_parameter('keyframes_topic').value
@@ -164,7 +143,7 @@ class PoseGraphNode(Node):
         )
 
     def _on_odom_stamp(self, msg: Odometry) -> None:
-        """Latch latest *reasonable* /ekf/odom stamp for map→odom TF (avoids TF_OLD_DATA from stale DDS)."""
+
         st = msg.header.stamp
         t = Time.from_msg(st)
         now = self.get_clock().now()
@@ -195,7 +174,6 @@ class PoseGraphNode(Node):
         yaw = math.atan2(float(T[1, 0]), float(T[0, 0]))
         qx, qy, qz, qw = quaternion_from_euler(0.0, 0.0, yaw)
         msg = TransformStamped()
-        # Match EKF odometry stamp so map→odom chains with odom→base_link at LiDAR/IMU times.
         if self._last_odom_stamp is not None:
             msg.header.stamp = self._last_odom_stamp
         else:
@@ -270,7 +248,7 @@ class PoseGraphNode(Node):
 
         x0 = P0[1:, :].copy().ravel()
 
-        def fun(x_flat: np.ndarray) -> np.ndarray:  # residual vector for scipy.least_squares
+        def fun(x_flat: np.ndarray) -> np.ndarray:
             p = np.zeros((n, 3), dtype=np.float64)
             p[0, :] = P0[0, :]
             p[1:, :] = x_flat.reshape(n - 1, 3)
@@ -287,7 +265,7 @@ class PoseGraphNode(Node):
                 return np.zeros(0, dtype=np.float64)
             return np.concatenate(blocks)
 
-        res = least_squares(  # trust-region reflective; dense Jacobian from finite diff
+        res = least_squares(
             fun,
             x0,
             method='trf',

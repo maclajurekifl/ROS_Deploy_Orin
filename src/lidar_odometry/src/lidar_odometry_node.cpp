@@ -1,32 +1,4 @@
-/**
- * Lidar odometry using PCL Normal Distributions Transform (NDT).
- *
- * registration_mode = "scan_to_scan":
- *   Consecutive scans; same as original behavior.
- *
- * registration_mode = "scan_to_map":
- *   Maintains a voxel map in odom (accumulated aligned scans).
- *   Default high-performance path (scan_to_map_register_sensor_frame=true): source = filtered scan in
- *   **sensor** frame, target = map in **odom**, ndt.align(..., T_odom_sensor_pred) — full 3D T_ndt kept
- *   internally; global_pose_full_ is kept planar (SE2 in odom) after each scan_to_map update;
- *   global_pose_ matches it for publish/2D. Optional
- *   yaw blend (ndt_fuse_prior_planar_yaw + ndt_prior_yaw_blend) and corridor degeneracy check.
- *   Map merge uses transformPointCloud(..., T_odom_sensor_new). Legacy path: T_ndt * T_pred. Optional
- *   coarse NDT, keyframe merge, opposite-motion / tiny-correction fallbacks.
- *   Optional ndt_gate_until_prior_translation_m: skip NDT until planar EKF prior |xy| exceeds threshold
- *   (reduces bad startup alignment when TF is not yet stable).
- *
- * Motion prior for scan_to_map (parameter use_tf_initial_guess, default true):
- *   TF lookup odom_frame -> base_frame at the cloud stamp (e.g. from ekf_node). If that stamp is
- *   not in the buffer yet (NDT often receives the cloud before ekf_node's same-topic callback
- *   publishes odom->base_link at that time), falls back to latest TF, then to last integrated pose.
- *
- * Subscribes: sensor_msgs/PointCloud2
- * Publishes:
- *   - nav_msgs/Odometry : integrated planar pose in odom_frame -> base_frame
- *   - geometry_msgs/TwistStamped : planar step in **odom** (Δx, Δy, Δθ); header.frame_id = odom_frame
- *   - geometry_msgs/PoseStamped (scan_to_map only): NDT planar correction vs prediction
- */
+
 #include <algorithm>
 #include <cmath>
 #include <deque>
@@ -73,12 +45,7 @@ static float wrapAnglePi(float a) {
   return std::atan2(std::sin(a), std::cos(a));
 }
 
-/**
- * PCL 1.12 NDT builds the target with VoxelGridCovariance but does not expose
- * setMinPointPerVoxel / setCovEigValueInflationRatio. Without those, fine resolution +
- * sparse Livox-style cells often yield singular covariances and repeated
- * "[VoxelGridCovariance::applyFilter] Invalid eigen value! (0, 0, 0)" warnings.
- */
+
 class ConfigurableNdt : public pcl::NormalDistributionsTransform<pcl::PointXYZ, pcl::PointXYZ> {
  public:
   using Base = pcl::NormalDistributionsTransform<pcl::PointXYZ, pcl::PointXYZ>;
@@ -117,10 +84,7 @@ class ConfigurableNdt : public pcl::NormalDistributionsTransform<pcl::PointXYZ, 
   double voxel_cov_eig_inflation_ratio_{0.05};
 };
 
-/**
- * NDT returns full 6-DOF; for planar driving, keep translation and replace rotation with Rz(yaw)
- * using the same yaw convention as yawFrom2DBlock (valid when roll/pitch are small).
- */
+
 static Eigen::Affine3f ndtSensorPosePlanarSeal(const Eigen::Affine3f &T) {
   Eigen::Affine3f out = T;
   const float yaw = yawFrom2DBlock(T.matrix());
@@ -128,7 +92,7 @@ static Eigen::Affine3f ndtSensorPosePlanarSeal(const Eigen::Affine3f &T) {
   return out;
 }
 
-/** Planar SE2 pose (z=0, yaw only) extracted from a general rigid transform. */
+
 static Eigen::Affine3f planarAffineFromFull(const Eigen::Affine3f &T) {
   const Eigen::Matrix4f M = T.matrix();
   const float x = M.coeff(0, 3);
@@ -144,7 +108,7 @@ static Eigen::Affine3f planarAffineFromFull(const Eigen::Affine3f &T) {
   return out;
 }
 
-/** Build planar increment in odom (xy + yaw about z) from T_ndt^{-1} (scan-to-scan). */
+
 static Eigen::Affine3f planarIncrementFromNdt(const Eigen::Matrix4f &T_source_to_target) {
   const Eigen::Matrix4f T_inc = T_source_to_target.inverse();
   const float dx = T_inc.coeff(0, 3);
@@ -202,8 +166,6 @@ class LidarOdometryNode : public rclcpp::Node {
     }
     map_merge_leaf_initial_ = map_merge_leaf_;
     map_max_points_ = declare_parameter<int>("map_max_points", 400000);
-    // scan_to_map only: every N successful alignments, replace voxel map from a short ring of
-    // recent aligned scans (drops accumulated bad geometry; global_pose_ unchanged). 0 = disabled.
     map_refresh_period_scans_ = declare_parameter<int>("scan_to_map_map_refresh_period", 0);
     {
       int keep = declare_parameter<int>("scan_to_map_refresh_keep_scans", 3);
@@ -215,7 +177,6 @@ class LidarOdometryNode : public rclcpp::Node {
       }
       scan_to_map_ring_max_ = static_cast<size_t>(keep);
     }
-    // scan_to_map: register sensor-frame source to odom map with align(..., T_odom_sensor_pred).
     scan_to_map_register_sensor_frame_ =
         declare_parameter<bool>("scan_to_map_register_sensor_frame", false);
 
@@ -244,8 +205,6 @@ class LidarOdometryNode : public rclcpp::Node {
     map_merge_keyframe_min_yaw_rad_ = static_cast<float>(
         declare_parameter<double>("map_merge_keyframe_min_yaw_rad", 0.0));
 
-    // base_link <- lidar frame: roll, pitch, yaw (rad), x, y, z (m). Default identity if cloud
-    // is already in base_link; set for livox_frame offset from base.
     std::vector<double> ext = declare_parameter<std::vector<double>>(
         "sensor_extrinsic_rpy_xyz", std::vector<double>{0, 0, 0, 0, 0, 0});
     if (ext.size() != 6U) {
@@ -349,7 +308,7 @@ class LidarOdometryNode : public rclcpp::Node {
   }
 
  private:
-  /** stdout + logger: integrated odom->base planar pose (not raw getFinalTransformation). */
+
   void debugPrintAccumulatedPose(const char *tag) {
     if (!log_accumulated_pose_) {
       return;
@@ -363,7 +322,7 @@ class LidarOdometryNode : public rclcpp::Node {
         get_logger(), "NDT_ACCUM_POSE [%s]: x=%.5f y=%.5f yaw=%.5f rad", tag, x, y, yaw);
   }
 
-  /** Per-scan NDT output only — must be composed into global_pose_; do not assign pose = this. */
+
   void debugPrintNdtRelativePlanar(const char *tag, const Eigen::Affine3f &rel_planar) {
     if (!log_ndt_relative_) {
       return;
@@ -380,12 +339,12 @@ class LidarOdometryNode : public rclcpp::Node {
         tag, tx, ty, dyaw);
   }
 
-  /** Publishable planar odom→base from accumulated full 3D pose. */
+
   void projectGlobalPoseToPlanar() {
     global_pose_ = planarAffineFromFull(global_pose_full_);
   }
 
-  /** VoxelGridCovariance settings for PCL 1.12 NDT (no public setCovarianceEpsilon on this version). */
+
   void configureNdt(ConfigurableNdt &ndt, float resolution, int max_iterations) const {
     ndt.setVoxelMinPointsPerVoxel(ndt_voxel_min_points_);
     ndt.setVoxelCovEigInflationRatio(ndt_voxel_cov_eig_inflation_ratio_);
@@ -395,7 +354,7 @@ class LidarOdometryNode : public rclcpp::Node {
     ndt.setMaximumIterations(max_iterations);
   }
 
-  /** Planar odom->base prior: EKF TF at cloud time; else latest TF; else last integrated NDT pose. */
+
   Eigen::Affine3f initialGuessOdomBase(const builtin_interfaces::msg::Time &stamp) const {
     if (!use_tf_initial_guess_ || !tf_buffer_) {
       return global_pose_full_;
@@ -481,7 +440,6 @@ class LidarOdometryNode : public rclcpp::Node {
       const Eigen::Affine3f &increment_odom_left) {
     geometry_msgs::msg::TwistStamped tw;
     tw.header.stamp = stamp;
-    // Planar step T_new * T_pred^{-1} in odom (world xy); NOT body-frame despite TwistStamped norms.
     tw.header.frame_id = odom_frame_;
     tw.twist.linear.x = static_cast<double>(increment_odom_left.translation().x());
     tw.twist.linear.y = static_cast<double>(increment_odom_left.translation().y());
@@ -511,7 +469,7 @@ class LidarOdometryNode : public rclcpp::Node {
     pub_pose_correction_->publish(pc);
   }
 
-  /** If prior_odom_base is set, fill twist from planar (T_pred^{-1} * T_new) / dt (child_frame convention). */
+
   void publishOdom(
       const builtin_interfaces::msg::Time &stamp,
       const Eigen::Affine3f *prior_odom_base = nullptr) {
@@ -575,7 +533,7 @@ class LidarOdometryNode : public rclcpp::Node {
     }
   }
 
-  /** Sensor frame -> odom using planar base pose in odom. */
+
   void cloudSensorToOdom(const PointCloudPtr &cloud_sensor, const Eigen::Affine3f &T_odom_base,
                          PointCloudPtr cloud_odom) const {
     const Eigen::Affine3f T_odom_sensor = T_odom_base * T_base_sensor_;
@@ -613,8 +571,6 @@ class LidarOdometryNode : public rclcpp::Node {
     }
 
     if (!have_map_) {
-      // Map is built in odom using T_odom_base_pred; keep integrated pose in sync so the first
-      // /lidar/odom is not stuck at identity while EKF already moved (avoids NIS rejects / spin).
       global_pose_full_ = planarAffineFromFull(T_odom_base_pred);
       projectGlobalPoseToPlanar();
       last_map_merge_pose_ = global_pose_;
@@ -859,7 +815,7 @@ class LidarOdometryNode : public rclcpp::Node {
     }
   }
 
-  /** If enabled, periodically discard accumulated map and rebuild target from recent aligned scans. */
+
   void maybePeriodicScanToMapRefresh() {
     if (!scan_to_map_ || map_refresh_period_scans_ <= 0) {
       return;
@@ -1003,7 +959,7 @@ class LidarOdometryNode : public rclcpp::Node {
   PointCloudPtr target_cloud_;
   PointCloudPtr map_cloud_;
   Eigen::Affine3f global_pose_;
-  /** Accumulated odom→base (6-DOF); global_pose_ is planar projection for publish/2D logic. */
+
   Eigen::Affine3f global_pose_full_;
 
   bool have_twist_ref_stamp_{false};
@@ -1075,7 +1031,7 @@ class LidarOdometryNode : public rclcpp::Node {
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 };
 
-}  // namespace lidar_odometry
+}
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);

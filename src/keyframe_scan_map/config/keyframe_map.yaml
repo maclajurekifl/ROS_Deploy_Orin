@@ -1,9 +1,5 @@
-# keyframe_map_node — knobs = docs/tuning.md §6–7; rest below.
 keyframe_map_node:
   ros__parameters:
-    # =========================================================================
-    # KNOBS — only parameters listed in docs/tuning.md §6–7
-    # =========================================================================
 
     deskew_imu_stamp_offset_sec: -0.01
     deskew_cloud_stamp_offset_sec: 0.0
@@ -18,9 +14,6 @@ keyframe_map_node:
     max_map_points: 2500000
     max_pts_per_scan: 80000
 
-    # =========================================================================
-    # REST
-    # =========================================================================
 
     publish_keyframe_path: true
 
@@ -70,7 +63,6 @@ keyframe_map_node:
 
     use_lidar_odom_for_robot_pose: true
     lidar_odom_topic: /lidar/odom
-    # Used when lidar_odom_approximate_sync is false (nearest-neighbor fallback).
     lidar_odom_max_age_sec: 0.03
     lidar_odom_approximate_sync: true
     lidar_odom_approx_sync_slop_sec: 0.01

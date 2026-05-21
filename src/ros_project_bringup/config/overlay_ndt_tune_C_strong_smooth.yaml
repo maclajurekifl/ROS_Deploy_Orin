@@ -1,6 +1,4 @@
 slam_bringup:
-  # C) Strong smoothing + capped iterations
-  # Goal: suppress jitter further while avoiding overfitting each scan.
   lidar_voxel_leaf_size: 0.36
   lidar_ndt_step_size: 0.04
   lidar_ndt_max_iterations: 30

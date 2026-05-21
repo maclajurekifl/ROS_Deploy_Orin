@@ -1,0 +1,8 @@
+slam_bringup:
+  use_lio: false
+  use_lidar_fusion: true
+  lidar_voxel_leaf_size: 0.45
+  lidar_crop_range_m: 55.0
+  lidar_ndt_resolution: 0.45
+  lidar_ndt_max_iterations: 35
+  lidar_use_tf_initial_guess: true

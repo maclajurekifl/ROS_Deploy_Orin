@@ -1,22 +1,17 @@
 slam_bringup:
-  # Agile isolation mode: pure FAST-LIO front-end.
   use_lio: true
   use_lidar_fusion: false
   use_microstrain_imu: false
   start_keyframe_map: false
   start_pose_graph: false
 
-  # Keep keyframe deskew path out of this test.
   keyframe_deskew_enable: false
   keyframe_deskew_imu_follow_ekf: false
   keyframe_deskew_imu_topic: /livox/imu
 
-  # Keep deskew offset neutral; leave EKF offsets untouched for this phase.
   keyframe_deskew_imu_stamp_offset_sec: 0.0
 
-  # Use agile FAST-LIO overlay (Livox IMU + fixed identity extrinsic).
   lio_overlay_params_file: config/fastlio_mid360_agile_timing_overlay.yaml
 
-  # No sign/identity hacks.
   keyframe_deskew_imu_sign: 1.0
   keyframe_deskew_livox_imu_sensor_as_cloud_identity: false

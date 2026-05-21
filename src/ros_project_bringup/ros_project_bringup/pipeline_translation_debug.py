@@ -1,23 +1,5 @@
 #!/usr/bin/env python3
-"""
-Trace planar translation: LiDAR odom (default /lidar/odom = LIO relay or smoothed NDT) vs EKF vs TF.
 
-Run beside launch + bag (same ROS_DOMAIN_ID, ROS_USE_SIM_TIME=true).
-
-How to read
------------
-- **step_lidar**: |Δxy| between consecutive **NDT** odometry messages (~10 Hz).
-- **step_ekf**: |Δxy| of **EKF** state sampled at those same LiDAR times (snapshots).
-- **ratio_window** (rolling): sum(step_ekf) / sum(step_lidar). Near **1** ⇒ EKF tracks NDT translation.
-  Near **0** with nonzero step_lidar ⇒ translation dies **between NDT output and EKF/TF** (fusion / prediction).
-- **step_tf**: |Δxy| from TF **odom→base_link** at each LiDAR message stamp (falls back to latest if lookup fails).
-
-If **step_lidar ≈ 0** always ⇒ problem is **upstream of EKF** (NDT / topics / replay).
-
-If **step_lidar >> 0** but **step_ekf ≈ 0** ⇒ **EKF** is not integrating LiDAR translation (or IMU-only prediction dominates).
-
-If **step_ekf >> 0** but **step_tf ≈ 0** ⇒ **TF publish** / stamp / RViz frame issue.
-"""
 from __future__ import annotations
 
 import collections
@@ -65,7 +47,7 @@ class PipelineTranslationDebug(Node):
         self._tfbuf = Buffer(cache_time=Duration(seconds=120.0))
         self._tflis = TransformListener(self._tfbuf, self, spin_thread=True)
 
-        self._latest_ekf = None  # Odometry
+        self._latest_ekf = None
         self._prev_lidar_xy: tuple[float, float] | None = None
         self._prev_ekf_snap: tuple[float, float] | None = None
         self._prev_tf_xy: tuple[float, float] | None = None
@@ -88,7 +70,7 @@ class PipelineTranslationDebug(Node):
         self._latest_ekf = msg
 
     def _tf_xy_for_stamp(self, stamp) -> tuple[float, float, str]:
-        """TF odom→base at cloud/odom stamp; fallback to latest if buffer cannot extrapolate."""
+
         t = Time.from_msg(stamp)
         try:
             tr = self._tfbuf.lookup_transform(
@@ -159,7 +141,6 @@ class PipelineTranslationDebug(Node):
         n_l = len(self._steps_lidar)
         ratio = (se / sl) if sl > 1e-6 else float('nan')
 
-        # Interpretation hint
         hint = ''
         if n_l == 0:
             hint = 'no lidar steps yet'
