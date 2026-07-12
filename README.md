@@ -1,3 +1,5 @@
+﻿> **EEE3017 Year 3 Project** — companion visualisation: https://github.com/maclajurekifl/ROS_Robot_Vis  
+> Dissertation: `docs/EEE3017_Dissertation.pdf` — overview: `docs/PROJECT.md`
 # ROS_Deploy_Orin
 
 ROS 2 (Humble) workspace: **Livox MID360**, **planar EKF**, optional **PCL NDT** or **FAST-LIO** LiDAR odometry, and **keyframe map** + pose graph.
@@ -33,7 +35,7 @@ ros2 launch ros_project_bringup launch_slam.launch.py use_sim_time:=true launch_
 ros2 bag play ~/bags/your_session --clock
 ```
 
-If recorded TF fights the stack, use `python3 scripts/bag_play_no_recorded_tf.py` — see **`scripts/README.md`**.
+If recorded TF fights the stack, use `python3 scripts/bag_play_no_recorded_tf.py` â€” see **`scripts/README.md`**.
 
 **Headless** (no RViz on the robot):
 
@@ -57,20 +59,20 @@ ros2 launch ros_project_bringup launch_slam.launch.py use_lio:=false use_lidar_f
 
 ## Launch parameters (defaults)
 
-Empty launch args mean “use **`src/ros_project_bringup/config/slam_bringup.yaml`**”. The table below is what you should assume when **not** passing overrides (documented product defaults).
+Empty launch args mean â€œuse **`src/ros_project_bringup/config/slam_bringup.yaml`**â€. The table below is what you should assume when **not** passing overrides (documented product defaults).
 
 | Launch argument | Default | Effect |
 |-----------------|---------|--------|
-| **`use_lio`** | **`false`** | `true` → FAST-LIO + relay to `/lidar/odom`; `false` → NDT if fusion is on |
-| **`use_lidar_fusion`** | **`true`** | `true` → start NDT when `use_lio` is false; `false` → no NDT |
-| **`launch_sensors`** | **`false`** | `true` → Livox + Microstrain drivers and sensor static TFs on this host |
-| **`use_sim_time`** | **`false`** | `true` → follow `/clock` (bag replay) |
-| **`start_rviz`** | **`false`** | `true` → RViz with `slam.rviz` |
+| **`use_lio`** | **`false`** | `true` â†’ FAST-LIO + relay to `/lidar/odom`; `false` â†’ NDT if fusion is on |
+| **`use_lidar_fusion`** | **`true`** | `true` â†’ start NDT when `use_lio` is false; `false` â†’ no NDT |
+| **`launch_sensors`** | **`false`** | `true` â†’ Livox + Microstrain drivers and sensor static TFs on this host |
+| **`use_sim_time`** | **`false`** | `true` â†’ follow `/clock` (bag replay) |
+| **`start_rviz`** | **`false`** | `true` â†’ RViz with `slam.rviz` |
 | **`start_keyframe_map`** | **`true`** | Merged map `/keyframe_map` |
 | **`start_pose_graph`** | **`true`** | Pose graph (needs keyframe map) |
 | **`bringup_config`** | *(empty)* | Path to YAML merged over `slam_bringup.yaml`, or set **`ROS_PROJECT_SLAM_CONFIG`** |
 
-**Odometry source when using defaults above:** **NDT** (`lidar_odometry`) → **`/lidar/odom`** → **EKF** → **`/ekf/odom`** and TF **`odom` → `base_link`**.
+**Odometry source when using defaults above:** **NDT** (`lidar_odometry`) â†’ **`/lidar/odom`** â†’ **EKF** â†’ **`/ekf/odom`** and TF **`odom` â†’ `base_link`**.
 
 If both **`use_lidar_fusion`** and **`use_lio`** are true, **LIO wins** (NDT is not started).
 
@@ -102,9 +104,10 @@ Rebuild after YAML changes: `colcon build --packages-select <package>` then re-s
 
 ## Scripts and more detail
 
-- **`scripts/README.md`** — bag compare, diagnostics, recording helpers
-- **`readme/deployment.md`** — deployment on Jetson / field robot
-- **`readme/autorun.md`** — autorun / startup notes
-- **`readme/comments.md`** — extracted source comments (developer reference)
-- **`src/LiDAR-Instructions.md`** — FAST-LIO topics, extrinsics, TF
-- **`src/ros_project_bringup/docs/STACK_OVERVIEW.md`** — node graph (in package share after build)
+- **`scripts/README.md`** â€” bag compare, diagnostics, recording helpers
+- **`readme/deployment.md`** â€” deployment on Jetson / field robot
+- **`readme/autorun.md`** â€” autorun / startup notes
+- **`readme/comments.md`** â€” extracted source comments (developer reference)
+- **`src/LiDAR-Instructions.md`** â€” FAST-LIO topics, extrinsics, TF
+- **`src/ros_project_bringup/docs/STACK_OVERVIEW.md`** â€” node graph (in package share after build)
+
