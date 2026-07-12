@@ -1,4 +1,6 @@
-﻿> **EEE3017 Year 3 Project** — companion visualisation: https://github.com/maclajurekifl/ROS_Robot_Vis  
+﻿# Jetson Orin LiDAR SLAM
+
+> **EEE3017 Year 3 Project** — companion visualisation: https://github.com/maclajurekifl/ros2-robot-visualization  
 > Dissertation: `docs/EEE3017_Dissertation.pdf` — overview: `docs/PROJECT.md`
 # ROS_Deploy_Orin
 
@@ -110,4 +112,5 @@ Rebuild after YAML changes: `colcon build --packages-select <package>` then re-s
 - **`readme/comments.md`** â€” extracted source comments (developer reference)
 - **`src/LiDAR-Instructions.md`** â€” FAST-LIO topics, extrinsics, TF
 - **`src/ros_project_bringup/docs/STACK_OVERVIEW.md`** â€” node graph (in package share after build)
+
 

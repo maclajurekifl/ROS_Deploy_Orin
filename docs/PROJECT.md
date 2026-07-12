@@ -1,34 +1,14 @@
-# Year 3 Project — ROS 2 SLAM on Jetson Orin (EEE3017)
+﻿# Jetson Orin LiDAR SLAM (EEE3017)
 
-Personal portfolio mirror of the University of Surrey **EEE3017 Year 3 Project** deployment stack.
+ROS 2 Humble SLAM stack for an **NVIDIA Jetson Orin** robot with a **Livox MID360** LiDAR.
 
-**Companion visualisation repo:** [ROS_Robot_Vis](https://github.com/maclajurekifl/ROS_Robot_Vis)
+**Companion repo:** [ros2-robot-visualization](https://github.com/maclajurekifl/ros2-robot-visualization)
 
-## What this is
+Includes planar EKF localisation, optional PCL NDT or FAST-LIO odometry, and keyframe mapping.
 
-ROS 2 (**Humble**) workspace targeting **NVIDIA Jetson Orin** with:
-
-- Livox MID360 LiDAR driver
-- Planar EKF localisation
-- Optional **PCL NDT** or **FAST-LIO** LiDAR odometry
-- Keyframe map + pose graph
-
-## Documentation
-
-- `docs/EEE3017_Dissertation.pdf` — final dissertation submission
-- `src/LiDAR-Instructions.md` — LiDAR / stack notes
-- `CHANGES-CONFIGS` — configuration change log
-- Original bring-up instructions in `README.md` sections below / `scripts/`
-
-## Related repositories
-
-| Repo | Role |
-|------|------|
-| **This repo (`ROS_Deploy_Orin`)** | On-robot SLAM / sensor stack |
-| [`ROS_Robot_Vis`](https://github.com/maclajurekifl/ROS_Robot_Vis) | Minimal RViz / URDF visualisation |
-
-Upstream development also lived under the `UniversityProjectMacla` GitHub organisation.
+## Docs
+- `docs/EEE3017_Dissertation.pdf`
+- `src/LiDAR-Instructions.md`
 
 ## Author
-
-Jude Burton — University of Surrey, Electrical & Electronic Engineering
+Jude Burton
